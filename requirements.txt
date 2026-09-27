@@ -1,0 +1,7 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+websockets>=12.0
+numpy>=1.24.0
+neuprint-python>=0.4.26
+trimesh>=4.0.0
+pillow>=10.0.0

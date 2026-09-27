@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Pigeon / Death Star v2: Biyolojik Sinek Pilotlu TIE Fighter</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=2.1">
+    
+    <!-- Three.js ve Eklentileri İçin Import Map -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="white-flash"></div>
+
+    <!-- HUD Katmanı -->
+    <div id="hud-overlay">
+        <!-- Üst Bar -->
+        <div class="top-bar">
+            <div class="title-card interactive">
+                <h1>PROJECT PIGEON / DEATH STAR v2</h1>
+                <p>Nöro-Biyolojik Uzay Gemisi: Sinek Beyni (Drosophila Melanogaster) Kontrollü TIE Fighter</p>
+            </div>
+
+            <div class="neuprint-badge interactive" id="neuprint-badge">
+                <div class="neuprint-title">⚡ JANELIA NEUPRINT CANLI KONEKTOM</div>
+                <div class="neuprint-sub" id="val-neuprint-info">Dataset: male-cns:v1.0 | Token: zort.py | LC10a & DNp01 & PAM & Fdg_PER</div>
+                <div class="neuprint-sub" style="color: #00f0ff;">WebSocket: <span id="val-ws-status">BAĞLANILIYOR...</span></div>
+            </div>
+        </div>
+
+        <!-- 3D Mini Nöral Hologram Penceresi -->
+        <div id="hologram-container" class="interactive">
+            <div id="hologram-label">CANLI KONEKTOM HOLOGRAMI</div>
+        </div>
+
+        <!-- 1 Dakika Hayatta Kalma Sayacı & Ölüm Yıldızı Yaklaşım Barı -->
+        <div id="survival-hud">
+            <div class="survival-hud-title">🛸 SİPERDE HAYATTA KALMA // ÖLÜM YILDIZI YAKLAŞIMI</div>
+            <div class="survival-bar-container">
+                <div class="survival-bar-fill" id="survival-bar-fill" style="width: 0%;"></div>
+            </div>
+            <div class="survival-status-text" id="val-survival-text">HAYATTA KALMA: 0.0s / 60.0s (HEDEFE KALAN: 60s)</div>
+        </div>
+
+        <!-- Ölüm Yıldızı Reaktör Çekirdeği Kalkan Barı (5 Can) -->
+        <div id="boss-hud" style="display: none;">
+            <div class="boss-hud-title">💥 ÖLÜM YILDIZI REAKTÖR ÇEKİRDEĞİ</div>
+            <div class="boss-pips-container">
+                <div class="boss-pip" id="ds-hp-1"></div>
+                <div class="boss-pip" id="ds-hp-2"></div>
+                <div class="boss-pip" id="ds-hp-3"></div>
+                <div class="boss-pip" id="ds-hp-4"></div>
+                <div class="boss-pip" id="ds-hp-5"></div>
+            </div>
+            <div class="boss-status-text" id="val-boss-hp">REAKTÖR KALKANI: 5 / 5</div>
+        </div>
+
+        <!-- Orta Nişangah (Crosshair - Tam Merkez) -->
+        <div class="center-crosshair">
+            <div class="crosshair" id="hud-crosshair"></div>
+        </div>
+
+        <!-- Alt Bilgilendirme Bannerları (Fighter Görüşünü Kapatmayacak Şekilde Aşağı Taşındı) -->
+        <div class="alert-container">
+            <div class="alert-banner alert-barrel-roll" id="banner-barrel-roll">
+                ⚡ GIANT FIBER (DNp01) TETİKLENDİ: 360° FIÇI TONOSU (BARREL ROLL)!
+            </div>
+            <div class="alert-banner alert-dopamine" id="banner-dopamine">
+                🌟 MUSHROOM BODY PAM DOPAMİN PATLAMASI (+40 mV)!
+            </div>
+            <div class="alert-banner alert-dodge" id="banner-dodge-success" style="display: none;">
+                ⚡ OTONOM KAÇINMA (DODGE) BAŞARILI! +25 mV DOPAMİN ÖDÜLÜ!
+            </div>
+            <div class="alert-banner alert-finale" id="banner-finale" style="display: none;">
+                🎯 HEDEF KİLİTLENDİ: TERMAL EGZOZ DELİĞİ (LC10a OTO-KİLİTLEME AKTİF)!
+            </div>
+            <div class="alert-banner alert-proboscis" id="banner-proboscis" style="display: none;">
+                👅 PROBOSCIS REFLEKSİ (PER): SİNEK HORTUMUYLA BESİNE HAMLE YAPTI -> PROTON TORPİDOLARI ATEŞLENDİ!
+            </div>
+            <div class="alert-banner alert-victory" id="banner-victory" style="display: none;">
+                🏆 ÖLÜM YILDIZI İMHA EDİLDİ! REAKTÖR ÇÖKTÜ! NİHAİ DOPAMİN PATLAMASI (+100 mV)!
+            </div>
+            <div class="alert-banner alert-barrel-roll" id="banner-game-over" style="display: none;">
+                💀 TIE FIGHTER DÜŞÜRÜLDÜ - SİNEK ETKİSİZ HALE GELDİ (Yeniden Başlat: 'R')
+                <div style="margin-top: 10px;">
+                    <button class="hud-btn interactive" id="btn-restart">YENİDEN BAŞLAT</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alt Telemetri Panelleri -->
+        <div class="hud-panels">
+            <!-- Sol Panel: Biyolojik Nöro-Motor Sistem -->
+            <div class="panel interactive">
+                <div class="panel-title">
+                    <span>NÖRO-MOTOR BİYOLOJİK TELEMETRİ</span>
+                    <span style="color: #00ff66;">200 Hz</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Kanat Asimetrisi (ΔΦ = ΦL - ΦR):</span>
+                    <span class="telemetry-val" id="val-deltaphi">0.0°</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Çırpma Frekansı:</span>
+                    <span class="telemetry-val" id="val-wingfreq">200 Hz</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>750 Ommatidia Bileşik Göz:</span>
+                    <span class="telemetry-val" id="val-ommatidia">0 / 750</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Giant Fiber (DNp01) Potansiyeli:</span>
+                    <span class="telemetry-val" id="val-dnp01">-70.0 mV</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Hedef Takip Nöronu (LC10a):</span>
+                    <span class="telemetry-val" id="val-lc10a">-70.0 mV</span>
+                </div>
+                <div class="telemetry-row" style="margin-top: 4px; border-top: 1px dashed rgba(255,0,170,0.3); padding-top: 4px;">
+                    <span>Proboscis (PER) Refleksi:</span>
+                    <span class="telemetry-val" id="val-proboscis" style="color: #ff00aa;">HAZIR (-70.0 mV)</span>
+                </div>
+            </div>
+
+            <!-- Orta Panel: Sinek Öğrenme Seviyesi & Plastisite -->
+            <div class="panel interactive" style="min-width: 320px;">
+                <div class="panel-title">
+                    <span>SİNEK ÖĞRENME SEVİYESİ</span>
+                    <span style="color: #00f0ff;" id="val-synaptic-eff">1.00x Güç</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Mevcut Aşama:</span>
+                    <span class="telemetry-val" id="val-learning-level" style="color: #00ff66; font-size: 0.8rem;">Seviye 1: Larva / Acemi Refleks</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Kaçınma Oranı (Dodge):</span>
+                    <span class="telemetry-val" id="val-dodge-stats">0 Başarılı (100%)</span>
+                </div>
+                <div class="telemetry-row" style="margin-top: 6px;">
+                    <span>Sinaptik Plastisite (LTP):</span>
+                    <span class="telemetry-val" id="val-learning-pct" style="color: #00f0ff;">6%</span>
+                </div>
+                <div class="dopamine-meter">
+                    <div class="dopamine-fill" id="learning-bar" style="background: linear-gradient(90deg, #00f0ff, #00ff66); box-shadow: 0 0 10px #00f0ff; width: 6%;"></div>
+                </div>
+                <div class="telemetry-row" style="margin-top: 5px; border-top: 1px dashed rgba(0, 240, 255, 0.3); padding-top: 3px;">
+                    <span>Hedef Kilitlenme (Lock-On):</span>
+                    <span class="telemetry-val" id="val-boss-lock" style="color: #00f0ff;">HİZALANIYOR (%0)</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Atış İsabet Yeteneği:</span>
+                    <span class="telemetry-val" id="val-boss-accuracy" style="color: #ffaa00;">%50</span>
+                </div>
+            </div>
+
+            <!-- Sağ Panel: Gemi & Görev Kontrol -->
+            <div class="panel interactive">
+                <div class="panel-title">
+                    <span>TIE FIGHTER & GÖREV KONTROL</span>
+                    <span style="color: #ffb700;">PAM ÖDÜL DÖNGÜSÜ</span>
+                </div>
+                <div class="telemetry-row">
+                    <span>Sinek Zırhı / Hayati Durum:</span>
+                    <div class="health-container" style="width: 100px;">
+                        <div class="health-pip" id="hp-1"></div>
+                        <div class="health-pip" id="hp-2"></div>
+                        <div class="health-pip" id="hp-3"></div>
+                    </div>
+                </div>
+                <div class="telemetry-row" style="margin-top: 6px;">
+                    <span>Mushroom Body Dopamin:</span>
+                    <span class="telemetry-val" id="val-dopamine" style="color: #ffb700;">+0.0 mV</span>
+                </div>
+                <div class="dopamine-meter">
+                    <div class="dopamine-fill" id="dopamine-bar"></div>
+                </div>
+
+                <!-- Kamera & Eylem Butonları -->
+                <div class="camera-controls">
+                    <button class="hud-btn active" id="btn-cam-chase" title="Arkadan Takip (Tuş: 1)">1. TAKİP</button>
+                    <button class="hud-btn" id="btn-cam-cockpit" title="Şeffaf Kokpitteki Sineğe Yakın Çekim (Tuş: 2)">2. SİNEK KOKPİT</button>
+                    <button class="hud-btn" id="btn-cam-pilot" title="Sineğin Gözünden Kokpit İçi (Tuş: 3)">3. PİLOT POV</button>
+                    <button class="hud-btn" id="btn-cam-deathstar" title="Ölüm Yıldızı 3D Modeli Gözlem (Tuş: 4)">4. ÖLÜM YILDIZI</button>
+                </div>
+
+                <div class="camera-controls" style="margin-top: 6px;">
+                    <button class="hud-btn hud-btn-finale" id="btn-finale" title="Ölüm Yıldızı Egzoz Deliği Final Koşusunu Başlat (Tuş: F)">🎯 FİNALİ BAŞLAT (F)</button>
+                    <button class="hud-btn hud-btn-dopamine" id="btn-dopamine" title="Mushroom Body'ye +40 mV Dopamin Ver (Tuş: D)">🌟 DOPAMİN (+40mV)</button>
+                    <button class="hud-btn" id="btn-laser" title="Manuel Tehdit Lazer Fırlat (Tuş: L)">⚡ LAZER FIRLAT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over & Zafer Modalı -->
+    <div id="game-over-modal" class="game-over-modal" style="display: none;">
+        <div class="game-over-card" id="go-card">
+            <div class="game-over-icon" id="go-icon">🏆</div>
+            <div class="game-over-badge" id="go-badge">[ GÖREV BAŞARILI - GAME OVER ]</div>
+            <h1 class="game-over-title" id="go-title">ÖLÜM YILDIZI İMHA EDİLDİ!</h1>
+            <p class="game-over-subtitle" id="go-subtitle">Biyolojik Sinek Beyni (Drosophila Melanogaster) Galaksiyi Kurtardı!</p>
+            
+            <div class="game-over-stats">
+                <div class="go-stat-row">
+                    <span>⏱️ Toplam Hayatta Kalma Süresi:</span>
+                    <span class="go-stat-val" id="go-survival-time">60.0s</span>
+                </div>
+                <div class="go-stat-row">
+                    <span>⚡ Kaçınılan Lazer Sayısı:</span>
+                    <span class="go-stat-val" id="go-dodges">58 Başarılı (%100)</span>
+                </div>
+                <div class="go-stat-row">
+                    <span>🎯 Proton Torpido İsabeti:</span>
+                    <span class="go-stat-val" id="go-torpedoes">5 / 5 (%98 - REAKTÖR ÇÖKTÜ)</span>
+                </div>
+                <div class="go-stat-row">
+                    <span>🧠 Sinek Nöral Seviyesi:</span>
+                    <span class="go-stat-val" id="go-level">Seviye 5: Sith Lordu Drosophila</span>
+                </div>
+                <div class="go-stat-row">
+                    <span>🧬 Sinaptik Plastisite (LTP):</span>
+                    <span class="go-stat-val" id="go-ltp">%100 Maksimum</span>
+                </div>
+                <div class="go-stat-row">
+                    <span>⭐ Mushroom Body Dopamin:</span>
+                    <span class="go-stat-val" id="go-dopamine">+100.0 mV</span>
+                </div>
+            </div>
+
+            <div class="game-over-actions">
+                <button class="hud-btn modal-btn" id="btn-modal-restart">🔄 YENİDEN BAŞLAT / TEKRAR OYNA (R)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Uygulama Modülü -->
+    <script type="module" src="/static/js/main.js?v=5.0"></script>
+</body>
+</html>
