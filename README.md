@@ -22,8 +22,8 @@
 
 ### 1. Depoyu Klonlayın
 ```bash
-git clone https://github.com/KULLANICI_ADI/deathstarv2.git
-cd deathstarv2
+git clone https://github.com/bilalefekilic34/deathstar.git
+cd deathstar
 ```
 
 ### 2. Sanal Ortam Oluşturun ve Bağımlılıkları Yükleyin
