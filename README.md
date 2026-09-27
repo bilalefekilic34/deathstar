@@ -116,7 +116,7 @@ deathstarv2/
 ├── server.py                 # FastAPI & WebSocket server / sunucusu
 ├── snn_ommatidia_engine.py   # 750 Ommatidia & Biological SNN engine / Biyolojik SNN motoru
 ├── requirements.txt          # Python dependencies / bağımlılıkları
-├── zort.example.py           # API configuration template / API yapılandırma şablonu
+├── api.py           # API configuration template / API yapılandırma şablonu
 ├── models/                   # 3D GLB models and textures / 3D GLB modelleri ve dokuları
 │   ├── death_star.glb
 │   ├── tie_fighter.glb
