@@ -40,17 +40,11 @@ pip install -r requirements.txt
 Sistem hem yerel Janelia konektom referans modeliyle hem de doğrudan Janelia Neuprint canlı API'siyle çalışabilir.
 
 1. [Janelia Neuprint](https://neuprint.janelia.org/) üzerinden bir kimlik doğrulama belirteci (token) edinin.
-2. `zort.example.py` dosyasını `zort.py` olarak kopyalayın:
-   ```bash
-   cp zort.example.py zort.py
-   ```
-3. `zort.py` dosyasını açıp API anahtarınızı girin:
+2. `api.py` dosyasını açıp API anahtarınızı girin:
    ```python
    YOUR_API_KEY = "BURAYA_TOKENINIZI_YAZIN"
    ```
    *(Alternatif olarak `NEUPRINT_APPLICATION_CREDENTIALS` ortam değişkenini de tanımlayabilirsiniz).*
-
-> **Not:** `zort.py` dosyası hassas API anahtarınızı barındırdığı için `.gitignore` tarafından korunur ve Git'e dahil edilmez.
 
 ---
 
