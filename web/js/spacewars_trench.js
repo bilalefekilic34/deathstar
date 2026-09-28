@@ -30,24 +30,36 @@ export class SpacewarsTrench {
                 (gltf) => {
                     this.baseTemplate = gltf.scene;
                     
-                    // Siper malzemelerini ayarla (Koyu İmparatorluk Zırh Çeliği ve Neon Raylar)
+                    // 1. Metalik Açık Gri Kaplama & PBR Materyal Ayarları (Mesh Traversing)
                     this.baseTemplate.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
+
+                            // Zemin kılavuz rayları (Pastel sky blue ışıma)
                             if (child.name.includes('rail')) {
-                                child.material = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
-                            } else if (child.name.includes('gantry')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x141a24,
-                                    roughness: 0.65,
-                                    metalness: 0.6
+                                    color: 0x1e293b,
+                                    emissive: 0x38bdf8, // Pastel sky blue
+                                    emissiveIntensity: 0.55,
+                                    roughness: 0.45,
+                                    metalness: 0.75
+                                });
+                            } else if (child.name.includes('floor') || child.name.includes('dock')) {
+                                // Zemin için 8F8F8F HTML renk kodu - Yüksek Metalik
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: 0x8f8f8f,       // Zemin: #8F8F8F
+                                    metalness: 0.88,       // Yüksek metalik hissiyat
+                                    roughness: 0.40,       // Parlak endüstriyel metalik zemin yansıması
+                                    envMapIntensity: 1.6
                                 });
                             } else {
+                                // Duvarlar için #a9b3bd HTML renk kodu - Açık Uzay Grisi PBR Metalik
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x1e2736,
-                                    roughness: 0.75,
-                                    metalness: 0.5
+                                    color: 0xa9b3bd,       // Duvarlar: #a9b3bd
+                                    metalness: 0.85,       // Yüksek yansıtıcılık
+                                    roughness: 0.35,       // Işığı şıkça saçan metalik yüzey
+                                    envMapIntensity: 1.8
                                 });
                             }
                         }
@@ -92,10 +104,18 @@ export class SpacewarsTrench {
     }
 
     addRunwayLights() {
-        // İki kenara neon kırmızı & camgöbeği rehber ışık şeritleri
+        // İki kenara yumuşak pastel gül & gök mavisi rehber ışık şeritleri
         const lightGeo = new THREE.BoxGeometry(0.3, 0.2, 600);
-        const redMat = new THREE.MeshBasicMaterial({ color: 0xff1133 });
-        const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+        const redMat = new THREE.MeshStandardMaterial({
+            color: 0x334155,
+            emissive: 0xf87171, // Pastel soft rose/coral
+            emissiveIntensity: 0.5
+        });
+        const cyanMat = new THREE.MeshStandardMaterial({
+            color: 0x334155,
+            emissive: 0x38bdf8, // Pastel soft sky blue
+            emissiveIntensity: 0.5
+        });
 
         this.leftStrip = new THREE.Mesh(lightGeo, redMat);
         this.leftStrip.position.set(-44.0, 0.5, 250);
@@ -134,13 +154,13 @@ export class SpacewarsTrench {
         deathStarTex.repeat.set(4, 3);
         this.endWall = new THREE.Group();
 
-        // 1. Siper Tabanı Ağır İskele ve Rampa (Y=[0, 8] - Görüşü kesinlikle kapatmaz)
+        // 1. Siper Tabanı Ağır İskele ve Rampa (Zemin: #8F8F8F - Metalik)
         const dockGeo = new THREE.BoxGeometry(96, 10, 16);
         const dockMat = new THREE.MeshStandardMaterial({
             map: deathStarTex,
-            color: new THREE.Color(0x8090a5),
-            roughness: 0.65,
-            metalness: 0.45
+            color: new THREE.Color(0x8f8f8f),
+            roughness: 0.42,
+            metalness: 0.88
         });
         const floorDock = new THREE.Mesh(dockGeo, dockMat);
         floorDock.position.set(0, 4.0, 0);
@@ -148,13 +168,13 @@ export class SpacewarsTrench {
         floorDock.receiveShadow = true;
         this.endWall.add(floorDock);
 
-        // 2. Yan Siper Çerçeveleri & Ağır Güçlendirilmiş Kolonlar (X = ±46)
-        // Merkez ve gökyüzü (Y > 9) tamamen AÇIKTIR, arkadaki Todesstern 3D modeli tüm heybetiyle görünür!
+        // 2. Yan Siper Çerçeveleri & Ağır Güçlendirilmiş Kolonlar (Duvarlar: #a9b3bd - Metalik)
         const pillarGeo = new THREE.BoxGeometry(14, 130, 24);
         const pillarMat = new THREE.MeshStandardMaterial({
-            color: 0x334055,
-            roughness: 0.65,
-            metalness: 0.45
+            color: 0xa9b3bd,
+            roughness: 0.35,
+            metalness: 0.85,
+            envMapIntensity: 1.8
         });
         const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
         leftPillar.position.set(-46, 55.0, 2);
@@ -164,10 +184,10 @@ export class SpacewarsTrench {
         rightPillar.position.set(46, 55.0, 2);
         this.endWall.add(rightPillar);
 
-        // 4. İmparatorluk Güç Hatları (Cyan & Amber Işıyan Enerji Tüpleri)
+        // 4. İmparatorluk Güç Hatları (Pastel Sky Blue & Amber Enerji Tüpleri)
         const conduitGeo = new THREE.CylinderGeometry(1.2, 1.2, 120, 12);
-        const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
-        const amberMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+        const cyanMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, emissive: 0x38bdf8, emissiveIntensity: 0.6 });
+        const amberMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, emissive: 0xfbbf24, emissiveIntensity: 0.6 });
 
         const tubeL = new THREE.Mesh(conduitGeo, cyanMat);
         tubeL.position.set(-36, 55.0, 11);

@@ -175,9 +175,9 @@ export class DeathStarStation {
 
                             const mat = new THREE.MeshStandardMaterial({
                                 map: texture || null,
-                                color: new THREE.Color(0xa0b0c2),
-                                roughness: 0.55,
-                                metalness: 0.45,
+                                color: new THREE.Color(0xb0b5b9),
+                                roughness: 0.46,
+                                metalness: 0.85,
                                 side: THREE.DoubleSide,
                                 fog: false
                             });

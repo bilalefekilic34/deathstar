@@ -30,7 +30,7 @@ export class StarfieldSystem {
             new THREE.Color(0xb8d8ff), // Soğuk yıldız mavisi
             new THREE.Color(0xffffff), // Saf beyaz
             new THREE.Color(0xffeaad), // Sıcak kehribar / altın
-            new THREE.Color(0x00f0ff)  // İyon camgöbeği
+            new THREE.Color(0x7dd3fc)  // Pastel gök mavisi
         ];
 
         for (let i = 0; i < this.particleCount; i++) {

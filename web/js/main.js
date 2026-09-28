@@ -26,16 +26,27 @@ class SpacewarsSimulation {
     constructor() {
         this.container = document.getElementById('canvas-container');
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x020306);
-        // Dengeli lineer sis: 200m'ye kadar net görüş, derin ufukta yumuşak geçiş
-        this.scene.fog = new THREE.Fog(0x020306, 200, 1800);
+        this.scene.background = new THREE.Color(0x0b1320); // Derin uzay laciverti / koyu gri-mavi
+        // Derinlik algısını artıran yumuşak sis:
+        this.scene.fog = new THREE.Fog(0x0b1320, 200, 1600);
 
         this.camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 2500);
+        this.camera.position.set(0, 36.5, -20.0);
+        this.camera.lookAt(0, 32.5, 15.0);
         this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.15;
         this.container.appendChild(this.renderer.domElement);
+
+        // Dinamik Çevre Haritası (PMREMGenerator HDRI) & PBR Panel/Bump Yüzey Dokuları
+        this.envMap = null;
+        this.trenchBumpMap = null;
+        this.setupEnvironmentMap();
+        this.createTrenchTextures();
 
         // Alt Sistemler
         this.trench = new SpacewarsTrench(this.scene);
@@ -244,35 +255,461 @@ class SpacewarsSimulation {
                 }
             })
         );
-        console.log('[Preload] ✓ Tüm 3D uzay ve boss varlıkları önceden hazırlandı! Sıfır gecikme mimarisi devrede.');
+
+        // Siper (Trench / Death Star) modelini yükledikten hemen sonra traverse döngüsü:
+        // Tüm siper ve istasyon mesh'lerini açık gri PBR metalik kaplama ile donat
+        if (this.trench) {
+            if (this.trench.baseTemplate) this.applyMetallicTrenchMaterials(this.trench.baseTemplate);
+            if (this.trench.modules) this.trench.modules.forEach(m => this.applyMetallicTrenchMaterials(m));
+            if (this.trench.endWall) this.applyMetallicTrenchMaterials(this.trench.endWall);
+        }
+        if (this.deathStar && this.deathStar.model) {
+            this.applyMetallicTrenchMaterials(this.deathStar.model);
+        }
+
+        console.log('[Preload] ✓ Tüm 3D uzay ve boss varlıkları açık gri metalik PBR kaplamalarla hazırlandı!');
+    }
+
+    /**
+     * 1. Çevre Yansıması (Environment Map / HDRI) Eklenmesi
+     * PMREMGenerator kullanarak dinamik uzay, nebula ve yıldız çevre haritası üretir.
+     * Bu harita sahnenin environment özelliğine ve duvar materyallerine atanarak
+     * metalik yüzeylerde gerçekçi PBR yansımaları oluşturur.
+     */
+    setupEnvironmentMap() {
+        try {
+            const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+            pmremGenerator.compileEquirectangularShader();
+
+            // 1024x512 Dinamik Equirectangular Uzay/Yıldız/Nebula Çevre Dokusu
+            const width = 1024;
+            const height = 512;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // Arka Plan Uzay & Çelik Gradyanı (Metalin pürüzsüz yüzeyinde ışık süzülmesi oluşturur)
+            const grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0.0, '#1a2436'); // Üst gök kubbe koyu çelik laciverti
+            grad.addColorStop(0.3, '#334155'); // Orta çelik grisi
+            grad.addColorStop(0.48, '#64748b'); // Ufuk yaklaşımı
+            grad.addColorStop(0.5, '#cbd5e1');  // Ufuk çizgisi: parlak metalik parıltı bandı
+            grad.addColorStop(0.52, '#64748b');
+            grad.addColorStop(0.7, '#334155');
+            grad.addColorStop(1.0, '#1e293b'); // Taban
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+
+            // 1. Ana parlak starlight & istasyon reflektörü (Üst sol - Soğuk gök mavisi speküler)
+            const spot1 = ctx.createRadialGradient(width * 0.28, height * 0.35, 10, width * 0.28, height * 0.35, 210);
+            spot1.addColorStop(0, 'rgba(255, 255, 255, 0.96)');
+            spot1.addColorStop(0.35, 'rgba(224, 242, 254, 0.78)');
+            spot1.addColorStop(0.7, 'rgba(56, 189, 248, 0.35)');
+            spot1.addColorStop(1, 'rgba(56, 189, 248, 0)');
+            ctx.fillStyle = spot1;
+            ctx.fillRect(0, 0, width, height);
+
+            // 2. Karşı açı reflektörü (Üst sağ - Sıcak amber/reaktör ışıltısı)
+            const spot2 = ctx.createRadialGradient(width * 0.72, height * 0.35, 10, width * 0.72, height * 0.35, 200);
+            spot2.addColorStop(0, 'rgba(255, 255, 255, 0.94)');
+            spot2.addColorStop(0.35, 'rgba(254, 243, 199, 0.72)');
+            spot2.addColorStop(0.7, 'rgba(251, 191, 36, 0.32)');
+            spot2.addColorStop(1, 'rgba(251, 191, 36, 0)');
+            ctx.fillStyle = spot2;
+            ctx.fillRect(0, 0, width, height);
+
+            // 3. Ölüm Yıldızı Siperi Ekvatoral Işık Çizgisi (Horizon gleam streak)
+            const horiz = ctx.createLinearGradient(0, height * 0.44, 0, height * 0.56);
+            horiz.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            horiz.addColorStop(0.5, 'rgba(255, 255, 255, 0.92)');
+            horiz.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = horiz;
+            ctx.fillRect(0, height * 0.44, width, height * 0.12);
+
+            // 4. Yıldız Parıltıları
+            let seed = 42;
+            const pseudoRandom = () => {
+                seed = (seed * 9301 + 49297) % 233280;
+                return seed / 233280;
+            };
+
+            for (let i = 0; i < 500; i++) {
+                const x = pseudoRandom() * width;
+                const y = pseudoRandom() * height;
+                const r = pseudoRandom() * 1.8 + 0.5;
+                const alpha = pseudoRandom() * 0.8 + 0.2;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(2)})`;
+                ctx.fill();
+            }
+
+            const envTexture = new THREE.CanvasTexture(canvas);
+            envTexture.mapping = THREE.EquirectangularReflectionMapping;
+            envTexture.colorSpace = THREE.SRGBColorSpace;
+
+            const envRenderTarget = pmremGenerator.fromEquirectangular(envTexture);
+            this.envMap = envRenderTarget.texture;
+            this.scene.environment = this.envMap;
+
+            pmremGenerator.dispose();
+            envTexture.dispose();
+
+            console.log('[Environment] ✓ PMREMGenerator dinamik uzay & nebula Environment Map oluşturuldu ve sahneye atandı!');
+        } catch (err) {
+            console.error('[Environment] PMREMGenerator başlatma hatası:', err);
+        }
+    }
+
+    /**
+     * 3. Yüzey Detayı ve Kusurlar (Bump Map)
+     * Düz ayna etkisini kırıp gerçekçi uzay istasyonu metal zırhı (panel derzleri,
+     * perçinler, erişim kapakları ve fırçalanmış mikro-çizikler) oluşturan prosedürel doku.
+     */
+    createTrenchTextures() {
+        try {
+            const size = 512;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Taban yüksekliği: nötr orta gri (128)
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, 0, size, size);
+
+            // 1. Zırh Panel Çizgileri ve Derz Boşlukları (Koyu girintiler / Seams)
+            const panelSize = 128; // 4x4 panel deseni
+            ctx.lineWidth = 3;
+            for (let x = 0; x <= size; x += panelSize) {
+                // Girinti kanalı (Koyu gölge)
+                ctx.strokeStyle = '#282828';
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, size);
+                ctx.stroke();
+
+                // Kanal pahı / Pah kenarı (Hafif aydınlık kabartı)
+                ctx.strokeStyle = '#b0b0b0';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x + 2, 0);
+                ctx.lineTo(x + 2, size);
+                ctx.stroke();
+                ctx.lineWidth = 3;
+            }
+
+            for (let y = 0; y <= size; y += panelSize) {
+                ctx.strokeStyle = '#282828';
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(size, y);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#b0b0b0';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, y + 2);
+                ctx.lineTo(size, y + 2);
+                ctx.stroke();
+                ctx.lineWidth = 3;
+            }
+
+            // 2. Alt-paneller ve Modüler Erişim Kapakları (Access Hatches)
+            const hatches = [
+                { x: 28, y: 28, w: 72, h: 52 },
+                { x: 156, y: 36, w: 92, h: 56 },
+                { x: 284, y: 24, w: 84, h: 80 },
+                { x: 412, y: 44, w: 72, h: 44 },
+                { x: 32, y: 156, w: 60, h: 84 },
+                { x: 164, y: 168, w: 80, h: 68 },
+                { x: 292, y: 156, w: 96, h: 72 },
+                { x: 416, y: 172, w: 68, h: 68 },
+                { x: 36, y: 284, w: 80, h: 72 },
+                { x: 160, y: 304, w: 88, h: 56 },
+                { x: 288, y: 280, w: 72, h: 92 },
+                { x: 408, y: 296, w: 80, h: 68 },
+                { x: 32, y: 408, w: 84, h: 64 },
+                { x: 156, y: 420, w: 72, h: 52 },
+                { x: 284, y: 404, w: 88, h: 72 },
+                { x: 420, y: 416, w: 64, h: 64 }
+            ];
+
+            hatches.forEach(h => {
+                // İç girinti
+                ctx.fillStyle = '#6e6e6e';
+                ctx.fillRect(h.x, h.y, h.w, h.h);
+                ctx.strokeStyle = '#323232';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(h.x, h.y, h.w, h.h);
+                // Üst ve sol kenarda bevel parlama
+                ctx.strokeStyle = '#c0c0c0';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(h.x, h.y + h.h);
+                ctx.lineTo(h.x, h.y);
+                ctx.lineTo(h.x + h.w, h.y);
+                ctx.stroke();
+            });
+
+            // 3. Perçinler ve Cıvata Sıraları (Rivets & Industrial Fasteners)
+            ctx.fillStyle = '#3a3a3a';
+            for (let p = 0; p < size; p += panelSize) {
+                for (let offset = 14; offset < panelSize; offset += 20) {
+                    // Yatay perçinler
+                    ctx.beginPath();
+                    ctx.arc(p + offset, p + 8, 1.8, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Dikey perçinler
+                    ctx.beginPath();
+                    ctx.arc(p + 8, p + offset, 1.8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // 4. Fırçalanmış Metal Çizikleri ve Mikro-Pürüzlülük (Brushed Metal Grain)
+            // Işığın kusursuz ayna gibi değil, uzay istasyonu metal zırhı gibi kırılmasını sağlar
+            const imgData = ctx.getImageData(0, 0, size, size);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const noise = (Math.random() - 0.5) * 26;
+                data[i] = Math.min(255, Math.max(0, data[i] + noise));
+                data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+                data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            this.trenchBumpMap = new THREE.CanvasTexture(canvas);
+            this.trenchBumpMap.wrapS = THREE.RepeatWrapping;
+            this.trenchBumpMap.wrapT = THREE.RepeatWrapping;
+            this.trenchBumpMap.repeat.set(12, 10);
+
+            // 5. Prosedürel PBR Roughness Map (Panel derzlerinde ve perçinlerde pürüzlülüğü artırır, plakalarda kaygan metalik parlama sağlar)
+            const rCanvas = document.createElement('canvas');
+            rCanvas.width = size;
+            rCanvas.height = size;
+            const rCtx = rCanvas.getContext('2d');
+            // Zırh plakaları: düşük pürüzlülük (0.35 civarı parlak metalik yüzey)
+            rCtx.fillStyle = '#555555';
+            rCtx.fillRect(0, 0, size, size);
+            // Derzler ve çizikler: daha yüksek pürüzlülük (mat endüstriyel kaynaklar)
+            rCtx.strokeStyle = '#999999';
+            rCtx.lineWidth = 3;
+            for (let x = 0; x <= size; x += panelSize) {
+                rCtx.beginPath();
+                rCtx.moveTo(x, 0);
+                rCtx.lineTo(x, size);
+                rCtx.stroke();
+            }
+            for (let y = 0; y <= size; y += panelSize) {
+                rCtx.beginPath();
+                rCtx.moveTo(0, y);
+                rCtx.lineTo(size, y);
+                rCtx.stroke();
+            }
+            this.trenchRoughnessMap = new THREE.CanvasTexture(rCanvas);
+            this.trenchRoughnessMap.wrapS = THREE.RepeatWrapping;
+            this.trenchRoughnessMap.wrapT = THREE.RepeatWrapping;
+            this.trenchRoughnessMap.repeat.set(12, 10);
+
+            // 6. Prosedürel PBR Albedo / Panel Haritası (Star Wars Açık Uzay Grisi #a9b3bd ile Panel Çizgileri)
+            const mapCanvas = document.createElement('canvas');
+            mapCanvas.width = size;
+            mapCanvas.height = size;
+            const mCtx = mapCanvas.getContext('2d');
+            // Zemin: #a9b3bd (açık uzay grisi)
+            mCtx.fillStyle = '#a9b3bd';
+            mCtx.fillRect(0, 0, size, size);
+
+            // Modüler paneller arası hafif renk tonu farkı (Star Wars endüstriyel durasteel plakaları)
+            for (let x = 0; x < size; x += panelSize) {
+                for (let y = 0; y < size; y += panelSize) {
+                    const tint = ((x / panelSize + y / panelSize) % 2 === 0) ? '#a2acb6' : '#b2bcc6';
+                    mCtx.fillStyle = tint;
+                    mCtx.fillRect(x + 2, y + 2, panelSize - 4, panelSize - 4);
+                }
+            }
+
+            // Panel derz çizgileri (Koyu hatlar)
+            mCtx.strokeStyle = '#757f8a';
+            mCtx.lineWidth = 3;
+            for (let x = 0; x <= size; x += panelSize) {
+                mCtx.beginPath();
+                mCtx.moveTo(x, 0);
+                mCtx.lineTo(x, size);
+                mCtx.stroke();
+            }
+            for (let y = 0; y <= size; y += panelSize) {
+                mCtx.beginPath();
+                mCtx.moveTo(0, y);
+                mCtx.lineTo(size, y);
+                mCtx.stroke();
+            }
+
+            // Erişim kapakları
+            hatches.forEach(h => {
+                mCtx.fillStyle = '#9aa4af';
+                mCtx.fillRect(h.x, h.y, h.w, h.h);
+                mCtx.strokeStyle = '#5d6772';
+                mCtx.lineWidth = 2;
+                mCtx.strokeRect(h.x, h.y, h.w, h.h);
+            });
+
+            // Perçinler
+            mCtx.fillStyle = '#5c6670';
+            for (let p = 0; p < size; p += panelSize) {
+                for (let offset = 14; offset < panelSize; offset += 20) {
+                    mCtx.beginPath();
+                    mCtx.arc(p + offset, p + 8, 1.8, 0, Math.PI * 2);
+                    mCtx.fill();
+                    mCtx.beginPath();
+                    mCtx.arc(p + 8, p + offset, 1.8, 0, Math.PI * 2);
+                    mCtx.fill();
+                }
+            }
+
+            this.trenchMap = new THREE.CanvasTexture(mapCanvas);
+            this.trenchMap.wrapS = THREE.RepeatWrapping;
+            this.trenchMap.wrapT = THREE.RepeatWrapping;
+            this.trenchMap.repeat.set(12, 10);
+            this.trenchMap.colorSpace = THREE.SRGBColorSpace;
+
+            console.log('[Material] ✓ Star Wars panel çizgileri, perçinler, Albedo/Bump/Roughness Maps hazırlandı!');
+        } catch (err) {
+            console.error('[Material] Bump map oluşturma hatası:', err);
+        }
+    }
+
+    /**
+     * GLTF Siper (Trench / Death Star) Modelleri İçin Metalik Açık Gri PBR Kaplama.
+     * 2. Fiziksel PBR Materyal Ayarları:
+     * - color: #a9b3bd (açık uzay grisi)
+     * - metalness: 0.85 (Yüksek yansıtıcılık)
+     * - roughness: 0.35 (Çok mat olmasın, ışık parlamaları yüzeyde süzülsün)
+     * - envMapIntensity: 1.8 (1.5 - 2.0 aralığında belirgin metalik yansıma gücü)
+     * - bumpMap: this.trenchBumpMap (panel çizgileri, perçinler, mikro-çizikler)
+     */
+    applyMetallicTrenchMaterials(model) {
+        if (!model) return;
+        model.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+
+                // Modelde UV koordinatları eksikse ve pürüzsüz yüzey normalleri için unindex & UV üret
+                if (child.geometry) {
+                    if (child.geometry.index) {
+                        child.geometry = child.geometry.toNonIndexed();
+                        child.geometry.computeVertexNormals();
+                    }
+                    if (!child.geometry.attributes.uv) {
+                        const pos = child.geometry.attributes.position;
+                        if (pos) {
+                            const uvs = new Float32Array(pos.count * 2);
+                            for (let i = 0; i < pos.count; i++) {
+                                const x = pos.getX(i);
+                                const y = pos.getY(i);
+                                const z = pos.getZ(i);
+                                if (child.name.includes('floor')) {
+                                    uvs[i * 2] = (x + 58) / 116;
+                                    uvs[i * 2 + 1] = (z + 60) / 120;
+                                } else {
+                                    uvs[i * 2] = (z + 60) / 120;
+                                    uvs[i * 2 + 1] = y / 110;
+                                }
+                            }
+                            child.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                            child.geometry.attributes.uv.needsUpdate = true;
+                        }
+                    }
+                }
+
+                // Zemin kılavuz rayları hariç tüm duvar ve siper objeleri
+                if (child.name.includes('rail')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x1e293b,
+                        emissive: 0x38bdf8,
+                        emissiveIntensity: 0.55,
+                        roughness: 0.45,
+                        metalness: 0.75,
+                        envMap: this.envMap,
+                        envMapIntensity: 1.0
+                    });
+                } else if (child.name.includes('floor') || child.name.includes('dock')) {
+                    // Zemin için 8F8F8F HTML renk kodu - Yüksek Metalik
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x8f8f8f,       // Zemin: #8F8F8F
+                        map: this.trenchMap,   // Endüstriyel zemin panelleri
+                        metalness: 0.88,       // Yüksek metalik hissiyat
+                        roughness: 0.40,       // Endüstriyel mat metal yansıması
+                        envMap: this.envMap,
+                        envMapIntensity: 1.6,
+                        bumpMap: this.trenchBumpMap,
+                        bumpScale: 0.10,
+                        roughnessMap: this.trenchRoughnessMap
+                    });
+                } else if (!child.name.includes('glass') && !child.name.includes('canopy')) {
+                    // Duvarlar: #a9b3bd (açık uzay grisi), metalness: 0.85, roughness: 0.35, envMapIntensity: 1.8
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0xa9b3bd,       // #a9b3bd (açık uzay grisi)
+                        map: this.trenchMap,   // Panel çizgileri, modüler durasteel zırh plakaları
+                        metalness: 0.85,       // Yüksek yansıtıcılık (0.85)
+                        roughness: 0.35,       // Işık parlamaları yüzeyde süzülen semi-gloss PBR (0.35)
+                        envMap: this.envMap,
+                        envMapIntensity: 1.8,  // 1.5 - 2.0 yansıma gücü
+                        bumpMap: this.trenchBumpMap,
+                        bumpScale: 0.15,       // Panel çizgileri, perçinler, endüstriyel kabartı
+                        roughnessMap: this.trenchRoughnessMap
+                    });
+                }
+            }
+        });
     }
 
     setupLights() {
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
-        this.scene.add(ambientLight);
+        // 1. Modellerin siluet olmasını önleyen, her yeri dengeli aydınlatan AmbientLight (0.85)
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+        this.scene.add(this.ambientLight);
 
-        this.dirLight = new THREE.DirectionalLight(0xeef8ff, 2.5);
-        this.dirLight.position.set(30, 80, 50);
+        // 2. Sağ taraftan açılı vuran, metalik duvarlarda tatmin edici specular highlight çıkaran DirectionalLight
+        this.dirLight = new THREE.DirectionalLight(0xf0f6ff, 2.0);
+        this.dirLight.position.set(35, 85, 35);
         this.dirLight.castShadow = true;
+        this.dirLight.shadow.mapSize.width = 2048;
+        this.dirLight.shadow.mapSize.height = 2048;
+        this.dirLight.shadow.camera.near = 0.5;
+        this.dirLight.shadow.camera.far = 350;
+        this.dirLight.shadow.camera.left = -80;
+        this.dirLight.shadow.camera.right = 80;
+        this.dirLight.shadow.camera.top = 80;
+        this.dirLight.shadow.camera.bottom = -80;
+        this.dirLight.shadow.bias = -0.0005;
         this.scene.add(this.dirLight);
         this.scene.add(this.dirLight.target);
 
-        // Kamera Feneri (Kameranın baktığı yönü daima sinematik olarak aydınlatır)
-        this.camLight = new THREE.DirectionalLight(0xffffff, 2.8);
-        this.camLight.position.set(0, 5, 0);
+        // 3. Sol taraftan karşı açı DirectionalLight (Her iki duvarın da dengeli metalik parlamasını sağlar)
+        this.fillLight = new THREE.DirectionalLight(0xdbeafe, 1.8);
+        this.fillLight.position.set(-35, 80, 25);
+        this.scene.add(this.fillLight);
+        this.scene.add(this.fillLight.target);
+
+        // 4. Kamera Feneri (Kameranın baktığı yöne vuran sinematik dolgu ışığı)
+        this.camLight = new THREE.DirectionalLight(0xe2e8f0, 1.2);
+        this.camLight.position.set(0, 3, 0);
         this.camLight.target.position.set(0, 0, -50);
         this.camera.add(this.camLight);
         this.camera.add(this.camLight.target);
         this.scene.add(this.camera);
 
-        // Kırmızı/Camgöbeği Atmosfer Işıkları
-        const pointRed = new THREE.PointLight(0xff0044, 1.8, 120);
-        pointRed.position.set(-20, 0, 40);
-        this.scene.add(pointRed);
+        // 5. Yumuşak pastel atmosferik nokta ışıkları (Pastel gül & gök mavisi)
+        const pointRose = new THREE.PointLight(0xf472b6, 0.5, 90);
+        pointRose.position.set(-20, 10, 40);
+        this.scene.add(pointRose);
 
-        const pointCyan = new THREE.PointLight(0x00f0ff, 1.8, 120);
-        pointCyan.position.set(20, 0, 40);
-        this.scene.add(pointCyan);
+        const pointSky = new THREE.PointLight(0x38bdf8, 0.5, 90);
+        pointSky.position.set(20, 10, 40);
+        this.scene.add(pointSky);
     }
 
     connectWebSocket() {
@@ -708,8 +1145,11 @@ class SpacewarsSimulation {
         const geo = new THREE.CylinderGeometry(0.18, 0.18, 6.0, 8);
         geo.rotateX(Math.PI / 2);
         
-        const mat = new THREE.MeshBasicMaterial({
-            color: 0x00ff44 // SADECE YEŞİL LAZERLER (Rebel X-Wing Zümrüt Plazma)
+        const mat = new THREE.MeshStandardMaterial({
+            color: 0x065f46,
+            emissive: 0x34d399, // Pastel nane/zümrüt yeşili
+            emissiveIntensity: 0.8,
+            roughness: 0.3
         });
 
         const laserMesh = new THREE.Mesh(geo, mat);
@@ -1059,21 +1499,36 @@ class SpacewarsSimulation {
         const ship = this.latestData.ship;
 
         if (this.cameraMode === 1) {
-            // Mode 1: Chase Cam (Sinematik Arkadan Takip)
-            const targetPos = new THREE.Vector3(ship.x * 0.7, ship.y + 5.5, ship.z - 22.0);
-            this.camera.position.lerp(targetPos, 0.12);
-            this.camera.lookAt(ship.x, ship.y + 0.8, ship.z + 18.0);
+            // Mode 1: Chase Cam (Sinematik Arkadan Takip - Gemiyi daima ideal mesafeden takip eder)
+            const targetX = ship.x;
+            const targetY = ship.y + 5.2;
+            const targetZ = ship.z - 26.0;
+            
+            // X ve Y eksenlerinde yumuşak yaylanma, Z ekseninde (ileri hız) senkronize takip
+            const smoothFactor = Math.min(1.0, 16.0 * dt);
+            this.camera.position.x += (targetX - this.camera.position.x) * smoothFactor;
+            this.camera.position.y += (targetY - this.camera.position.y) * smoothFactor;
+            this.camera.position.z = targetZ; // İleri eksende asla kopma yaşanmaz
+            
+            this.camera.lookAt(this.camera.position.x * 0.7 + ship.x * 0.3, ship.y + 0.8, ship.z + 28.0);
 
         } else if (this.cameraMode === 2) {
             // Mode 2: Cockpit Zoom (Şeffaf ön kokpit camından içeriye, sineğe doğrudan bakış)
-            const targetPos = new THREE.Vector3(ship.x, ship.y + 1.6, ship.z + 4.2);
-            this.camera.position.lerp(targetPos, 0.2);
-            this.camera.lookAt(ship.x, ship.y + 0.3, ship.z);
+            const targetX = ship.x;
+            const targetY = ship.y + 1.2;
+            const targetZ = ship.z + 5.2;
+
+            const smoothFactor = Math.min(1.0, 20.0 * dt);
+            this.camera.position.x += (targetX - this.camera.position.x) * smoothFactor;
+            this.camera.position.y += (targetY - this.camera.position.y) * smoothFactor;
+            this.camera.position.z = targetZ;
+
+            this.camera.lookAt(ship.x, ship.y - 0.1, ship.z + 0.2);
 
         } else if (this.cameraMode === 3) {
             // Mode 3: Fly Pilot First-Person (Kokpitin içinden görüş)
-            this.camera.position.set(ship.x, ship.y + 0.1, ship.z + 1.2);
-            this.camera.lookAt(ship.x, ship.y, ship.z + 80.0);
+            this.camera.position.set(ship.x, ship.y + 0.2, ship.z + 1.1);
+            this.camera.lookAt(ship.x, ship.y + 0.2, ship.z + 80.0);
 
         } else if (this.cameraMode === 4) {
             // Mode 4: Death Star Station Orbit Cam (Ölüm Yıldızı Modeli Detaylı Gözlem)
@@ -1089,6 +1544,11 @@ class SpacewarsSimulation {
                 );
                 this.camera.lookAt(dsPos.x, dsPos.y, dsPos.z);
             }
+
+        } else if (this.cameraMode === 5) {
+            // Mode 5: Trench Wall Cinematics (Siper Duvarı PBR Metalik & Yansıma Gözlemi)
+            this.camera.position.set(ship.x + 20.0, ship.y + 14.0, ship.z - 10.0);
+            this.camera.lookAt(ship.x - 50.0, ship.y + 18.0, ship.z + 20.0);
         }
 
         // Patlama / Çarpışma Ekran Sarsıntısı (Camera Trauma Shake)
@@ -1419,8 +1879,14 @@ class SpacewarsSimulation {
             }
 
             if (this.dirLight) {
-                this.dirLight.position.set(ship.x + 30, ship.y + 80, ship.z + 50);
+                this.dirLight.position.set(ship.x + 35, ship.y + 85, ship.z + 35);
                 this.dirLight.target.position.set(ship.x, ship.y, ship.z);
+            }
+            if (this.fillLight) {
+                this.fillLight.position.set(ship.x - 35, ship.y + 80, ship.z + 25);
+                if (this.fillLight.target) {
+                    this.fillLight.target.position.set(ship.x, ship.y, ship.z);
+                }
             }
 
             // 7. Lazerler ve Görsel Geri Bildirim

@@ -1,15 +1,31 @@
 /* deathstarv2/web/css/style.css */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap');
 
 :root {
-    --imperial-red: #ff1a35;
-    --deathstar-gray: #12151b;
-    --hud-cyan: #00f0ff;
-    --hud-green: #00ff66;
-    --dopamine-gold: #ffb700;
-    --giantfiber-red: #ff0044;
-    --panel-bg: rgba(10, 14, 22, 0.78);
-    --panel-border: rgba(0, 240, 255, 0.25);
+    --bg-space: #0b1320;
+    
+    /* Tipografi Renkleri (Göz yormayan, okunaklı modern palet) */
+    --text-primary: #e5e7eb;        /* Kırık beyaz (off-white / #E5E7EB) */
+    --text-secondary: #94a3b8;      /* Yumuşak açık gri-mavi (Slate-400) */
+    --text-muted: #64748b;          /* İkincil soluk gri (Slate-500) */
+    
+    /* Pastel Vurgu Renkleri (Saf neon glare yerine zarif sinematik tonlar) */
+    --accent-blue: #60a5fa;         /* Pastel açık mavi (Blue-400) */
+    --accent-green: #34d399;        /* Pastel açık yeşil (Emerald-400) */
+    --accent-cyan: #38bdf8;         /* Pastel gök mavisi (Sky-400) */
+    --accent-gold: #fbbf24;         /* Pastel altın (Amber-400) */
+    --accent-rose: #f87171;         /* Pastel mercan/gül (Rose-400) */
+    --accent-purple: #c084fc;       /* Pastel eflatun (Purple-400) */
+
+    /* Glassmorphism (Buzlu Cam) Arayüz Tokenları */
+    --glass-bg: rgba(30, 42, 62, 0.60);            /* Açık, modern ve saydam cam tonu */
+    --glass-bg-hover: rgba(45, 60, 88, 0.72);
+    --glass-bg-subtle: rgba(20, 30, 46, 0.50);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.12); /* İnce, yarı saydam ve zarif çizgi */
+    --glass-border-subtle: 1px solid rgba(148, 163, 184, 0.18);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --glass-blur: blur(8px);
+    --glass-radius: 8px;
 }
 
 * {
@@ -23,9 +39,9 @@ body, html {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background-color: #030407;
+    background-color: var(--bg-space);
     font-family: 'Share Tech Mono', monospace;
-    color: #e0f4ff;
+    color: var(--text-primary);
 }
 
 #canvas-container {
@@ -64,50 +80,54 @@ body, html {
 }
 
 .title-card {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-left: 4px solid var(--hud-cyan);
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    border-left: 3px solid var(--accent-blue);
     padding: 12px 20px;
-    border-radius: 4px;
-    backdrop-filter: blur(8px);
+    border-radius: var(--glass-radius);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
 }
 
 .title-card h1 {
     font-family: 'Orbitron', sans-serif;
-    font-size: 1.4rem;
-    letter-spacing: 2px;
-    color: var(--hud-cyan);
-    text-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+    font-size: 1.25rem;
+    letter-spacing: 1.5px;
+    color: var(--accent-blue);
+    text-shadow: 0 0 10px rgba(96, 165, 250, 0.35);
 }
 
 .title-card p {
-    font-size: 0.85rem;
-    color: #8da4be;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
     margin-top: 4px;
 }
 
 /* Janelia Neuprint Rozeti */
 .neuprint-badge {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-right: 4px solid var(--hud-green);
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    border-right: 3px solid var(--accent-green);
     padding: 12px 18px;
-    border-radius: 4px;
+    border-radius: var(--glass-radius);
     text-align: right;
-    backdrop-filter: blur(8px);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
 }
 
 .neuprint-title {
     font-family: 'Orbitron', sans-serif;
-    font-size: 0.95rem;
-    color: var(--hud-green);
+    font-size: 0.9rem;
+    color: var(--accent-green);
     font-weight: 700;
     letter-spacing: 1px;
 }
 
 .neuprint-sub {
-    font-size: 0.8rem;
-    color: #9ab4cb;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
     margin-top: 3px;
 }
 
@@ -122,9 +142,9 @@ body, html {
 }
 
 .crosshair {
-    width: 60px;
-    height: 60px;
-    border: 2px dashed rgba(0, 240, 255, 0.4);
+    width: 52px;
+    height: 52px;
+    border: 1.5px dashed rgba(96, 165, 250, 0.45);
     border-radius: 50%;
     margin: 0 auto;
     position: relative;
@@ -136,19 +156,17 @@ body, html {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 6px;
-    height: 6px;
-    background: var(--hud-cyan);
+    width: 4px;
+    height: 4px;
+    background: var(--accent-blue);
     transform: translate(-50%, -50%);
     border-radius: 50%;
 }
 
-/* Bilgilendirme Yazıları ve Uyarı Bannerları:
-   Boss sağlık çubuğunun hemen altında, TIE Fighter'ın veya alt telemetri panellerinin
-   üzerini asla kapatmayacak şekilde üst merkezde konumlandırılmıştır. */
+/* Bilgilendirme Yazıları ve Uyarı Bannerları */
 .alert-container {
     position: absolute;
-    top: 155px;
+    top: 145px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -165,42 +183,43 @@ body, html {
     display: none;
     margin: 0;
     font-family: 'Orbitron', sans-serif;
-    font-size: 0.84rem;
-    font-weight: 800;
-    padding: 6px 18px;
-    border-radius: 4px;
-    letter-spacing: 1.1px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 7px 18px;
+    border-radius: 6px;
+    letter-spacing: 1px;
     text-align: center;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
     animation: pulseAlert 0.4s infinite alternate;
 }
 
 .alert-barrel-roll {
-    background: rgba(255, 0, 68, 0.85);
-    color: #fff;
-    border: 2px solid #fff;
-    text-shadow: 0 0 10px #ff0044;
+    background: rgba(248, 113, 113, 0.25);
+    color: var(--accent-rose);
+    border: 1px solid var(--accent-rose);
+    text-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
 }
 
 .alert-dopamine {
-    background: rgba(255, 183, 0, 0.88);
-    color: #000;
-    border: 2px solid #fff;
-    text-shadow: 0 0 10px #ffea00;
+    background: rgba(251, 191, 36, 0.22);
+    color: var(--accent-gold);
+    border: 1px solid var(--accent-gold);
+    text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
 }
 
 .alert-dodge {
-    background: rgba(0, 255, 102, 0.92);
-    color: #03080e;
-    border: 2px solid #ffffff;
-    text-shadow: 0 0 10px #00ff66;
-    box-shadow: 0 0 20px rgba(0, 255, 102, 0.5);
+    background: rgba(52, 211, 153, 0.22);
+    color: var(--accent-green);
+    border: 1px solid var(--accent-green);
+    text-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 15px rgba(52, 211, 153, 0.25);
 }
 
 @keyframes pulseAlert {
-    0% { transform: scale(0.97); opacity: 0.9; }
-    100% { transform: scale(1.03); opacity: 1.0; }
+    0% { transform: scale(0.98); opacity: 0.92; }
+    100% { transform: scale(1.02); opacity: 1.0; }
 }
 
 /* Yan Paneller */
@@ -211,21 +230,23 @@ body, html {
 }
 
 .panel {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    padding: 14px 18px;
-    border-radius: 6px;
-    backdrop-filter: blur(10px);
-    min-width: 280px;
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    padding: 16px 20px;
+    border-radius: var(--glass-radius);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    min-width: 290px;
 }
 
 .panel-title {
     font-family: 'Orbitron', sans-serif;
-    font-size: 0.9rem;
-    color: var(--hud-cyan);
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(0, 240, 255, 0.2);
-    padding-bottom: 4px;
+    font-size: 0.88rem;
+    color: var(--accent-blue);
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 6px;
     display: flex;
     justify-content: space-between;
 }
@@ -234,12 +255,13 @@ body, html {
     display: flex;
     justify-content: space-between;
     margin-bottom: 6px;
-    font-size: 0.85rem;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
 }
 
 .telemetry-val {
-    color: #fff;
-    font-weight: bold;
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 /* Can Barı */
@@ -252,23 +274,24 @@ body, html {
 .health-pip {
     flex: 1;
     height: 8px;
-    background: var(--hud-green);
+    background: var(--accent-green);
     border-radius: 2px;
-    box-shadow: 0 0 6px var(--hud-green);
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
     transition: background 0.3s;
 }
 
 .health-pip.lost {
-    background: #333a42;
+    background: rgba(100, 116, 139, 0.3);
     box-shadow: none;
 }
 
 /* Dopamin Göstergesi */
 .dopamine-meter {
     width: 100%;
-    height: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    height: 8px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
     overflow: hidden;
     margin-top: 6px;
 }
@@ -276,8 +299,8 @@ body, html {
 .dopamine-fill {
     width: 0%;
     height: 100%;
-    background: linear-gradient(90deg, #ff9900, #ffee00);
-    box-shadow: 0 0 10px #ffbb00;
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
     transition: width 0.1s;
 }
 
@@ -289,33 +312,37 @@ body, html {
 }
 
 .hud-btn {
-    background: rgba(0, 240, 255, 0.15);
-    border: 1px solid var(--hud-cyan);
-    color: var(--hud-cyan);
+    background: rgba(51, 65, 85, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #93c5fd;
     font-family: 'Orbitron', sans-serif;
-    font-size: 0.75rem;
-    padding: 6px 12px;
-    border-radius: 4px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: all 0.2s ease;
 }
 
 .hud-btn:hover, .hud-btn.active {
-    background: var(--hud-cyan);
-    color: #050811;
-    box-shadow: 0 0 10px var(--hud-cyan);
+    background: #3b82f6;
+    border-color: var(--accent-blue);
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(96, 165, 250, 0.4);
 }
 
 .hud-btn-dopamine {
-    background: rgba(255, 183, 0, 0.2);
-    border-color: var(--dopamine-gold);
-    color: var(--dopamine-gold);
+    background: rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 191, 36, 0.35);
+    color: var(--accent-gold);
 }
 
 .hud-btn-dopamine:hover {
-    background: var(--dopamine-gold);
-    color: #000;
-    box-shadow: 0 0 12px var(--dopamine-gold);
+    background: var(--accent-gold);
+    color: #0f172a;
+    box-shadow: 0 0 14px rgba(251, 191, 36, 0.4);
 }
 
 /* Nöral Hologram Mini Köşe Penceresi */
@@ -325,11 +352,14 @@ body, html {
     right: 20px;
     width: 220px;
     height: 180px;
-    border: 1px solid rgba(0, 240, 255, 0.3);
-    background: rgba(5, 10, 18, 0.6);
-    border-radius: 4px;
+    border: var(--glass-border);
+    background: var(--glass-bg);
+    border-radius: var(--glass-radius);
     overflow: hidden;
     pointer-events: auto;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
 }
 
 #hologram-label {
@@ -337,10 +367,10 @@ body, html {
     bottom: 4px;
     left: 6px;
     font-size: 0.7rem;
-    color: var(--hud-cyan);
-    background: rgba(0, 0, 0, 0.6);
-    padding: 2px 6px;
-    border-radius: 2px;
+    color: var(--accent-cyan);
+    background: rgba(15, 23, 42, 0.7);
+    padding: 3px 8px;
+    border-radius: 4px;
 }
 
 /* Tam Ekran Beyaz Işık Patlaması Flaşı (Supernova White Flash) */
@@ -359,67 +389,62 @@ body, html {
 
 /* Final Butonu ve Bannerları */
 .hud-btn-finale {
-    background: rgba(255, 0, 102, 0.25);
-    border-color: #ff0066;
-    color: #ff3388;
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.4);
+    color: var(--accent-rose);
     transition: all 0.2s ease-in-out;
 }
 
 .hud-btn-finale:hover {
-    background: #ff0066;
+    background: #ef4444;
     color: #fff;
-    box-shadow: 0 0 15px #ff0066;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
 }
 
 .hud-btn-finale.ready-to-fire {
-    background: rgba(255, 0, 170, 0.55) !important;
-    border-color: #ff00ff !important;
+    background: rgba(192, 132, 252, 0.35) !important;
+    border-color: var(--accent-purple) !important;
     color: #ffffff !important;
-    box-shadow: 0 0 20px #ff00aa, inset 0 0 10px rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 0 18px rgba(192, 132, 252, 0.5) !important;
     animation: btnPulseFire 0.6s infinite alternate !important;
     font-weight: 700;
 }
 
 @keyframes btnPulseFire {
-    0% { transform: scale(1.0); box-shadow: 0 0 10px #ff00aa; }
-    100% { transform: scale(1.06); box-shadow: 0 0 25px #ff00ff, 0 0 40px #ff00aa; }
+    0% { transform: scale(1.0); box-shadow: 0 0 10px rgba(192, 132, 252, 0.4); }
+    100% { transform: scale(1.05); box-shadow: 0 0 22px rgba(192, 132, 252, 0.7); }
 }
 
 .alert-finale {
-    background: rgba(255, 170, 0, 0.92);
-    color: #080d1a;
-    border: 2px solid #fff;
-    text-shadow: 0 0 12px #ffaa00;
+    background: rgba(96, 165, 250, 0.22);
+    color: var(--accent-blue);
+    border: 1px solid var(--accent-blue);
+    text-shadow: 0 0 8px rgba(96, 165, 250, 0.4);
     animation: pulseAlert 0.8s infinite alternate;
 }
 
 .alert-proboscis {
-    background: rgba(255, 0, 170, 0.92);
-    color: #ffffff;
-    border: 2px solid #ff88ff;
-    text-shadow: 0 0 12px #ff00aa;
+    background: rgba(192, 132, 252, 0.22);
+    color: var(--accent-purple);
+    border: 1px solid var(--accent-purple);
+    text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
     animation: pulseAlert 0.6s infinite alternate;
 }
 
 .alert-victory {
-    background: linear-gradient(135deg, rgba(255, 200, 0, 0.95), rgba(255, 0, 68, 0.95));
+    background: rgba(52, 211, 153, 0.35);
     color: #ffffff;
-    border: 3px solid #ffffff;
-    font-size: 1.35rem;
-    padding: 18px 30px;
-    text-shadow: 0 0 20px #ffee00;
-    box-shadow: 0 0 50px rgba(255, 200, 0, 0.9);
+    border: 2px solid var(--accent-green);
+    font-size: 1.25rem;
+    padding: 16px 28px;
+    text-shadow: 0 0 15px rgba(52, 211, 153, 0.6);
+    box-shadow: 0 0 40px rgba(52, 211, 153, 0.4);
     animation: victoryGlow 1.2s infinite alternate;
 }
 
-@keyframes pulseAlert {
-    0% { transform: scale(0.98); box-shadow: 0 0 10px currentColor; }
-    100% { transform: scale(1.02); box-shadow: 0 0 25px currentColor; }
-}
-
 @keyframes victoryGlow {
-    0% { transform: scale(1.0); box-shadow: 0 0 30px #ffee00; }
-    100% { transform: scale(1.05); box-shadow: 0 0 60px #ff0055; }
+    0% { transform: scale(1.0); box-shadow: 0 0 25px rgba(52, 211, 153, 0.3); }
+    100% { transform: scale(1.04); box-shadow: 0 0 45px rgba(52, 211, 153, 0.6); }
 }
 
 /* Ölüm Yıldızı Boss Kalkan Barı */
@@ -428,28 +453,23 @@ body, html {
     top: 75px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(12, 18, 30, 0.92);
-    border: 2px solid #ff0055;
-    box-shadow: 0 0 30px rgba(255, 0, 85, 0.65), inset 0 0 15px rgba(255, 0, 85, 0.2);
-    border-radius: 8px;
+    background: var(--glass-bg);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    box-shadow: 0 8px 32px rgba(248, 113, 113, 0.2);
+    border-radius: var(--glass-radius);
     padding: 10px 28px;
     text-align: center;
     z-index: 100;
-    backdrop-filter: blur(8px);
-    animation: bossPulse 1.5s infinite alternate;
-}
-
-@keyframes bossPulse {
-    0% { box-shadow: 0 0 20px rgba(255, 0, 85, 0.5); }
-    100% { box-shadow: 0 0 35px rgba(255, 0, 85, 0.85); }
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .boss-hud-title {
-    font-size: 0.95rem;
-    font-weight: 800;
-    letter-spacing: 2px;
-    color: #ff3366;
-    text-shadow: 0 0 12px #ff0055;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent-rose);
+    text-shadow: 0 0 10px rgba(248, 113, 113, 0.4);
     margin-bottom: 6px;
 }
 
@@ -462,24 +482,24 @@ body, html {
 
 .boss-pip {
     width: 32px;
-    height: 12px;
-    background: linear-gradient(180deg, #ff3366, #cc0033);
-    border: 1px solid #ff6699;
+    height: 10px;
+    background: linear-gradient(180deg, #f87171, #ef4444);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 3px;
-    box-shadow: 0 0 10px #ff0055;
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
     transition: all 0.3s ease;
 }
 
 .boss-pip.destroyed {
-    background: #1e1118 !important;
-    border-color: #442233 !important;
+    background: rgba(100, 116, 139, 0.25) !important;
+    border-color: rgba(100, 116, 139, 0.3) !important;
     box-shadow: none !important;
-    opacity: 0.35 !important;
+    opacity: 0.4 !important;
 }
 
 .boss-status-text {
-    font-size: 0.82rem;
-    color: #ffbb00;
+    font-size: 0.8rem;
+    color: var(--accent-gold);
     font-weight: 700;
     letter-spacing: 1px;
 }
@@ -490,32 +510,33 @@ body, html {
     top: 75px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(10, 20, 35, 0.90);
-    border: 1px solid rgba(0, 240, 255, 0.6);
-    box-shadow: 0 0 25px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.15);
-    border-radius: 8px;
-    padding: 8px 24px;
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    border-radius: var(--glass-radius);
+    padding: 10px 24px;
     text-align: center;
     z-index: 100;
-    backdrop-filter: blur(8px);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
     min-width: 380px;
 }
 
 .survival-hud-title {
     font-size: 0.82rem;
-    font-weight: 800;
-    letter-spacing: 2px;
-    color: #00f0ff;
-    text-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent-blue);
+    text-shadow: 0 0 10px rgba(96, 165, 250, 0.35);
     margin-bottom: 6px;
 }
 
 .survival-bar-container {
     width: 100%;
-    height: 10px;
-    background: rgba(0, 30, 50, 0.8);
-    border: 1px solid rgba(0, 240, 255, 0.4);
-    border-radius: 5px;
+    height: 8px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
     overflow: hidden;
     margin-bottom: 5px;
 }
@@ -523,16 +544,16 @@ body, html {
 .survival-bar-fill {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #00f0ff, #00ff88, #ffea00);
-    box-shadow: 0 0 12px #00ff88;
+    background: linear-gradient(90deg, #60a5fa, #34d399, #fbbf24);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
     transition: width 0.15s ease-out;
 }
 
 .survival-status-text {
     font-size: 0.78rem;
-    color: #aaddff;
-    font-weight: 700;
-    letter-spacing: 1px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.8px;
 }
 
 /* Game Over & Zafer Modalı */
@@ -542,92 +563,96 @@ body, html {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(3, 7, 15, 0.88);
+    background: rgba(11, 19, 32, 0.82);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 99999;
-    animation: fadeInModal 0.6s ease-out;
+    animation: fadeInModal 0.5s ease-out;
 }
 
 @keyframes fadeInModal {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.96); }
     to { opacity: 1; transform: scale(1.0); }
 }
 
 .game-over-card {
-    background: linear-gradient(135deg, rgba(12, 22, 40, 0.96), rgba(5, 12, 25, 0.98));
-    border: 2px solid #00ff88;
-    box-shadow: 0 0 50px rgba(0, 255, 136, 0.5), inset 0 0 30px rgba(0, 255, 136, 0.15);
+    background: rgba(22, 33, 52, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top: 3px solid var(--accent-green);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
     border-radius: 12px;
     padding: 32px 48px;
     max-width: 600px;
     width: 90vw;
     text-align: center;
     position: relative;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .game-over-card.defeat {
-    border-color: #ff0055;
-    box-shadow: 0 0 50px rgba(255, 0, 85, 0.5), inset 0 0 30px rgba(255, 0, 85, 0.15);
+    border-top-color: var(--accent-rose);
+    box-shadow: 0 16px 48px rgba(248, 113, 113, 0.25);
 }
 
 .game-over-icon {
-    font-size: 3.5rem;
+    font-size: 3.2rem;
     margin-bottom: 8px;
     animation: bounceIcon 1s infinite alternate;
 }
 
 @keyframes bounceIcon {
     from { transform: translateY(0); }
-    to { transform: translateY(-8px); }
+    to { transform: translateY(-6px); }
 }
 
 .game-over-badge {
     display: inline-block;
     font-family: 'Orbitron', sans-serif;
     font-size: 0.82rem;
-    font-weight: 800;
-    letter-spacing: 2px;
-    color: #03080e;
-    background: #00ff88;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #0b1320;
+    background: var(--accent-green);
     padding: 4px 14px;
     border-radius: 4px;
     margin-bottom: 12px;
-    box-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.4);
 }
 
 .game-over-badge.defeat {
-    background: #ff0055;
+    background: var(--accent-rose);
     color: #fff;
-    box-shadow: 0 0 15px rgba(255, 0, 85, 0.6);
+    box-shadow: 0 0 12px rgba(248, 113, 113, 0.4);
 }
 
 .game-over-title {
     font-family: 'Orbitron', sans-serif;
-    font-size: 1.55rem;
-    font-weight: 900;
-    letter-spacing: 2px;
-    color: #fff;
-    text-shadow: 0 0 20px #00ff88;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: var(--text-primary);
+    text-shadow: 0 0 16px rgba(52, 211, 153, 0.35);
     margin: 0 0 8px 0;
 }
 
 .game-over-title.defeat {
-    text-shadow: 0 0 20px #ff0055;
+    text-shadow: 0 0 16px rgba(248, 113, 113, 0.35);
 }
 
 .game-over-subtitle {
     font-size: 0.9rem;
-    color: #b0c8e0;
+    color: var(--text-secondary);
     margin: 0 0 24px 0;
     line-height: 1.4;
 }
 
 .game-over-stats {
-    background: rgba(0, 15, 30, 0.6);
-    border: 1px solid rgba(0, 240, 255, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    border: var(--glass-border);
     border-radius: 8px;
     padding: 16px 20px;
     margin-bottom: 24px;
@@ -641,7 +666,7 @@ body, html {
     padding: 6px 0;
     border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
     font-size: 0.86rem;
-    color: #d0e4f8;
+    color: var(--text-secondary);
 }
 
 .go-stat-row:last-child {
@@ -651,25 +676,23 @@ body, html {
 .go-stat-val {
     font-family: 'Orbitron', sans-serif;
     font-weight: 700;
-    color: #00f0ff;
-    text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+    color: var(--accent-blue);
 }
 
 .modal-btn {
-    font-size: 1rem !important;
+    font-size: 0.95rem !important;
     padding: 12px 36px !important;
-    background: linear-gradient(135deg, rgba(0, 255, 136, 0.35), rgba(0, 200, 255, 0.35)) !important;
-    border: 2px solid #00ff88 !important;
+    background: #3b82f6 !important;
+    border: 1px solid var(--accent-blue) !important;
     color: #ffffff !important;
-    box-shadow: 0 0 25px rgba(0, 255, 136, 0.5) !important;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4) !important;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 8px;
     transition: all 0.2s ease-in-out;
 }
 
 .modal-btn:hover {
-    background: #00ff88 !important;
-    color: #03080e !important;
-    box-shadow: 0 0 35px #00ff88 !important;
-    transform: scale(1.05);
+    background: #2563eb !important;
+    box-shadow: 0 0 28px rgba(59, 130, 246, 0.6) !important;
+    transform: scale(1.03);
 }

@@ -35,33 +35,63 @@ export class BiologicalTieFighter {
                 (gltf) => {
                     this.tieMesh = gltf.scene;
 
-                    // Malzemeleri yapılandır (Şeffaf kokpit kubbesi)
+                    // Malzemeleri yapılandır (Şeffaf kokpit kubbesi ve detaylı gövde)
                     this.tieMesh.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
-                            // Kokpit camını şeffaf yap
-                            if (child.name.toLowerCase().includes('cockpit') || child.name.toLowerCase().includes('glass') || child.geometry.type.includes('Sphere')) {
+                            const name = child.name.toLowerCase();
+                            // Kokpit camını ultra berrak ve şeffaf yap (İçteki sinek net görünsün)
+                            if (name.includes('glass') || name.includes('canopy')) {
                                 child.material = new THREE.MeshPhysicalMaterial({
-                                    color: 0x88ccff,
-                                    transmission: 0.88,
+                                    color: 0x93c5fd,
+                                    transmission: 0.95,
                                     opacity: 0.35,
                                     transparent: true,
-                                    roughness: 0.1,
+                                    roughness: 0.08,
                                     metalness: 0.1,
-                                    ior: 1.5,
-                                    reflectivity: 0.8
+                                    ior: 1.45,
+                                    reflectivity: 0.7,
+                                    depthWrite: false
+                                });
+                            } else if (name.includes('wing') && !name.includes('pylon')) {
+                                // Güneş paneli kanatları: Sleek slate paneller & metalik yansıma
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: 0x283548,
+                                    roughness: 0.45,
+                                    metalness: 0.55
+                                });
+                            } else if (name.includes('engine')) {
+                                // İkiz İyon Motorları: Yumuşak pastel kırmızı egzoz ışıması
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: 0x1e293b,
+                                    emissive: 0xf87171,
+                                    emissiveIntensity: 1.0,
+                                    roughness: 0.35
                                 });
                             } else {
+                                // Gövde küresi, pylon kolları ve koltuk: Aydınlık İmparatorluk çeliği
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x222a36,
-                                    roughness: 0.55,
-                                    metalness: 0.75
+                                    color: 0x5a6a7e,
+                                    roughness: 0.38,
+                                    metalness: 0.6,
+                                    side: THREE.DoubleSide
                                 });
                             }
                         }
                     });
 
                     this.shipGroup.add(this.tieMesh);
+
+                    // Gemiye özel yerel aydınlatmalar: Siluetleşmeyi kesin olarak önler ve detayları öne çıkarır
+                    // 1. Üst Gövde Tepe Işığı: Kanat panelleri ve gövde çeliği üzerindeki detayları aydınlatır
+                    const shipTopLight = new THREE.PointLight(0xf1f5f9, 2.2, 28);
+                    shipTopLight.position.set(0, 4.2, 0);
+                    this.shipGroup.add(shipTopLight);
+
+                    // 2. İkiz İyon Motoru Arka Dolgu Işığı: Arkadan takipte motorları ve gövde hatlarını yumuşakça parlatır
+                    const engineGlowLight = new THREE.PointLight(0xf87171, 1.8, 14);
+                    engineGlowLight.position.set(0, 0, -2.6);
+                    this.shipGroup.add(engineGlowLight);
 
                     // 3D Biyolojik Sinek Pilotunu kokpite inşa et
                     this.buildFlyPilot();
@@ -103,17 +133,22 @@ export class BiologicalTieFighter {
     }
 
     buildFlyPilot() {
-        // Kokpitin tam ortası (0, 0, 0)
-        this.flyGroup.position.set(0, -0.2, 0.2);
-        this.flyGroup.scale.set(0.6, 0.6, 0.6);
+        // Kokpitin tam ortası
+        this.flyGroup.position.set(0, -0.15, 0.1);
+        this.flyGroup.scale.set(0.78, 0.78, 0.78);
+
+        // Kokpit içi yumuşak aydınlatma: Sinek pilotunun vücudunu ve kanatlarını aydınlatır
+        const cockpitLight = new THREE.PointLight(0xe0f2fe, 2.0, 10);
+        cockpitLight.position.set(0, 0.6, 0.5);
+        this.flyGroup.add(cockpitLight);
 
         // 1. Toraks (Göğüs)
         const thoraxGeo = new THREE.SphereGeometry(0.7, 16, 16);
         thoraxGeo.scale(1.0, 1.2, 1.5);
         const thoraxMat = new THREE.MeshStandardMaterial({
-            color: 0x221a14,
-            roughness: 0.5,
-            metalness: 0.3
+            color: 0x473322,
+            roughness: 0.4,
+            metalness: 0.25
         });
         const thorax = new THREE.Mesh(thoraxGeo, thoraxMat);
         this.flyGroup.add(thorax);
@@ -122,8 +157,8 @@ export class BiologicalTieFighter {
         const abdomenGeo = new THREE.SphereGeometry(0.85, 16, 16);
         abdomenGeo.scale(0.9, 0.9, 1.8);
         const abdomenMat = new THREE.MeshStandardMaterial({
-            color: 0x4a3728,
-            roughness: 0.4
+            color: 0x6b4e33,
+            roughness: 0.35
         });
         const abdomen = new THREE.Mesh(abdomenGeo, abdomenMat);
         abdomen.position.set(0, -0.3, -1.6);
@@ -192,10 +227,10 @@ export class BiologicalTieFighter {
         // 5. Mini Nöral Hologram (Sineğin kafasının üstünde süzülen 3D hologram)
         const holoGeo = new THREE.IcosahedronGeometry(0.35, 1);
         const holoMat = new THREE.MeshBasicMaterial({
-            color: 0x00f0ff,
+            color: 0x38bdf8,
             wireframe: true,
             transparent: true,
-            opacity: 0.8
+            opacity: 0.85
         });
         const miniBrain = new THREE.Mesh(holoGeo, holoMat);
         this.miniBrainHologram.position.set(0, 1.2, 1.2);

@@ -23,28 +23,28 @@ def create_trench_module():
     """Modüler Death Star Siper Segmenti (Uzunluk: 120m, Genişlik: 100m, Yükseklik: 110m)"""
     scene = trimesh.Scene()
     
-    # 1. Taban Plakası (Floor)
+    # 1. Taban Plakası (Floor - #8F8F8F)
     floor = trimesh.creation.box([116, 12, 120])
     floor.apply_translation([0, -6, 0])
-    floor.visual.face_colors = [26, 32, 44, 255] # Koyu metalik granit
+    floor.visual.face_colors = [143, 143, 143, 255] # Zemin (#8F8F8F)
     scene.add_geometry(floor, node_name="floor_base")
 
     # Taban kılavuz rayları / ızgaraları
     for x in [-35, -15, 15, 35]:
         rail = trimesh.creation.box([2, 1, 120])
         rail.apply_translation([x, 0.5, 0])
-        rail.visual.face_colors = [0, 240, 255, 200] # Neon cyan hat
+        rail.visual.face_colors = [56, 189, 248, 220] # Pastel sky blue hat
         scene.add_geometry(rail, node_name=f"floor_rail_{x}")
 
-    # 2. Sol ve Sağ Masif Duvarlar
+    # 2. Sol ve Sağ Masif Duvarlar (Açık Uzay Grisi #a9b3bd)
     left_wall = trimesh.creation.box([16, 110, 120])
     left_wall.apply_translation([-58, 55, 0])
-    left_wall.visual.face_colors = [32, 40, 54, 255]
+    left_wall.visual.face_colors = [169, 179, 189, 255] # Duvar (#a9b3bd)
     scene.add_geometry(left_wall, node_name="left_wall")
 
     right_wall = trimesh.creation.box([16, 110, 120])
     right_wall.apply_translation([58, 55, 0])
-    right_wall.visual.face_colors = [32, 40, 54, 255]
+    right_wall.visual.face_colors = [169, 179, 189, 255] # Duvar (#a9b3bd)
     scene.add_geometry(right_wall, node_name="right_wall")
 
     # 3. Duvar Greeble Panelleri & Destek Kolonları
@@ -52,36 +52,36 @@ def create_trench_module():
         # Sol ve sağ kolonlar
         p_l = trimesh.creation.box([5, 110, 8])
         p_l.apply_translation([-48, 55, z])
-        p_l.visual.face_colors = [20, 25, 35, 255]
+        p_l.visual.face_colors = [160, 170, 180, 255]
         scene.add_geometry(p_l, node_name=f"pillar_l_{z}")
 
         p_r = trimesh.creation.box([5, 110, 8])
         p_r.apply_translation([48, 55, z])
-        p_r.visual.face_colors = [20, 25, 35, 255]
+        p_r.visual.face_colors = [160, 170, 180, 255]
         scene.add_geometry(p_r, node_name=f"pillar_r_{z}")
 
         # Boru hatları (Conduits)
         pipe_l = trimesh.creation.cylinder(radius=1.2, height=120)
         rotate_mesh(pipe_l, np.pi / 2, [1, 0, 0])
         pipe_l.apply_translation([-49, 25, 0])
-        pipe_l.visual.face_colors = [80, 95, 115, 255]
+        pipe_l.visual.face_colors = [175, 185, 195, 255]
         scene.add_geometry(pipe_l, node_name=f"pipe_l_{z}")
 
     # 4. Üst Endüstriyel Kiriş (Overhead Gantry)
     gantry = trimesh.creation.box([100, 5, 8])
     gantry.apply_translation([0, 105, 0])
-    gantry.visual.face_colors = [38, 48, 64, 255]
+    gantry.visual.face_colors = [165, 175, 185, 255]
     scene.add_geometry(gantry, node_name="overhead_gantry")
 
     # 5. Savunma Tareti (Turret)
     t_base = trimesh.creation.cylinder(radius=6, height=14)
     t_base.apply_translation([-43, 7, 20])
-    t_base.visual.face_colors = [45, 55, 70, 255]
+    t_base.visual.face_colors = [155, 165, 175, 255]
     scene.add_geometry(t_base, node_name="turret_base")
 
     t_head = trimesh.creation.icosphere(subdivisions=2, radius=4.5)
     t_head.apply_translation([-43, 16, 20])
-    t_head.visual.face_colors = [35, 42, 55, 255]
+    t_head.visual.face_colors = [170, 180, 190, 255]
     scene.add_geometry(t_head, node_name="turret_head")
 
     out_path = os.path.join(MODELS_DIR, "trench_module.glb")
@@ -95,22 +95,27 @@ def create_tie_fighter():
     """Şeffaf Kokpitli ve Sinek Pilot Bölmeli TIE Fighter Modeli"""
     scene = trimesh.Scene()
 
-    # 1. Kokpit Küresi (Dış Gövde)
-    cockpit = trimesh.creation.icosphere(subdivisions=3, radius=2.3)
-    cockpit.visual.face_colors = [140, 160, 180, 255] # İmparatorluk açık gri metal
+    # 1. Kokpit Küresi (Dış Gövde - Ön ve Üst Cam Pencereleri Açık)
+    cockpit = trimesh.creation.icosphere(subdivisions=4, radius=2.3)
+    centers = cockpit.triangles_center
+    # Ön cam ve üst cam alanlarını açık bırakarak iç mekanın ve sinek pilotun görünmesini sağla
+    mask = ~((centers[:, 2] > 1.3) & (centers[:, 0]**2 + centers[:, 1]**2 < 2.0**2))
+    mask &= ~((centers[:, 1] > 1.4) & (centers[:, 0]**2 + centers[:, 2]**2 < 1.7**2))
+    cockpit.update_faces(mask)
+    cockpit.visual.face_colors = [70, 85, 105, 255] # İmparatorluk açık gri metal
     scene.add_geometry(cockpit, node_name="cockpit_hull")
 
     # 2. Ön Şeffaf Cam Kubbe (Kokpit Camı - Three.js'te cam materyali uygulanacak)
-    canopy = trimesh.creation.cylinder(radius=1.25, height=0.5)
+    canopy = trimesh.creation.cylinder(radius=1.35, height=0.25)
     rotate_mesh(canopy, np.pi / 2, [1, 0, 0])
     canopy.apply_translation([0, 0, 2.15])
-    canopy.visual.face_colors = [0, 240, 255, 110] # Şeffaf camgöbeği
+    canopy.visual.face_colors = [147, 197, 253, 110] # Şeffaf camgöbeği
     scene.add_geometry(canopy, node_name="cockpit_canopy_glass")
 
     # Üst Tavan Cam Kapağı (Sinek ve Nöral Hologramın Üstten Net Görülmesi İçin)
-    top_glass = trimesh.creation.cylinder(radius=1.1, height=0.4)
+    top_glass = trimesh.creation.cylinder(radius=1.2, height=0.25)
     top_glass.apply_translation([0, 2.15, 0])
-    top_glass.visual.face_colors = [0, 240, 255, 110]
+    top_glass.visual.face_colors = [147, 197, 253, 110]
     scene.add_geometry(top_glass, node_name="cockpit_top_glass")
 
     # 3. İkiz İyon Motoru Egzozları (Kırmızı Parlama)
