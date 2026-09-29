@@ -19,6 +19,7 @@ import { NeuralHologram } from './neural_hologram.js?v=6.0';
 import { ProtonTorpedoSystem } from './proton_torpedoes.js?v=6.0';
 import { DeathStarStation } from './death_star.js?v=6.0';
 import { StarfieldSystem } from './starfield.js?v=6.0';
+import { DarkXWingManager } from './dark_x_wing.js?v=7.0';
 
 window.THREE = THREE;
 
@@ -30,9 +31,9 @@ class SpacewarsSimulation {
         // Derinlik algısını artıran yumuşak sis:
         this.scene.fog = new THREE.Fog(0x0b1320, 200, 1600);
 
-        this.camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 2500);
-        this.camera.position.set(0, 36.5, -20.0);
-        this.camera.lookAt(0, 32.5, 15.0);
+        this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.5, 2500);
+        this.camera.position.set(0, 42.0, -35.0);
+        this.camera.lookAt(0, 33.0, 15.0);
         this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -60,6 +61,19 @@ class SpacewarsSimulation {
         this.torpedoes = new ProtonTorpedoSystem(this.scene);
         this.deathStar = new DeathStarStation(this.scene);
         this.starfield = new StarfieldSystem(this.scene);
+
+        // Çoklu-Ajan Dark X-Wing Düşman Filosu (Multi-Agent SNN)
+        this.darkXWingManager = new DarkXWingManager(
+            this.scene,
+            this.audioListener,
+            (spawnPos, speed, agentId) => {
+                this.spawnXWingLaser(spawnPos, speed, agentId);
+            },
+            (agentId, reason) => {
+                this.onXWingDestroyed(agentId, reason);
+            }
+        );
+
         this.dirLight = null;
 
         // Lazerler & Tehditler
@@ -68,6 +82,19 @@ class SpacewarsSimulation {
         this.lives = 3;
         this.isGameOver = false;
         this.isVictory = false;
+
+        // Paylaşılan Lazer Geometrisi ve Materyalleri (Zero Memory Leak & Zero Dynamic Lights)
+        this.sharedLaserGeo = new THREE.CylinderGeometry(0.16, 0.16, 5.5, 6);
+        this.sharedLaserGeo.rotateX(Math.PI / 2);
+        this.sharedXWingLaserMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+        this.sharedTurretLaserMat = new THREE.MeshBasicMaterial({ color: 0x34d399 });
+        this.sharedTieLaserGeo = new THREE.CylinderGeometry(0.18, 0.18, 5.8, 6);
+        this.sharedTieLaserGeo.rotateX(Math.PI / 2);
+        this.sharedTieLaserMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+        this.tieLasers = [];
+        this.lastTieLaserFireTime = 0;
+        this.lastDodgeTime = 0;
+        this.visualFeedbackFrameCounter = 0;
 
         // 1 Dakikalık Hayatta Kalma Sistemi & Ölüm Yıldızı Spawn Sayacı
         this.survivalTimer = 0.0;
@@ -97,6 +124,7 @@ class SpacewarsSimulation {
         // Son Gelen Telemetri
         this.latestData = {
             ship: { x: 0, y: 32, z: 0, roll: 0, pitch: 0, yaw: 0, speed: 35 },
+            enemies: [],
             fly: { wing_l: 0, wing_r: 0, delta_phi: 0, freq: 200.0 },
             neural: {
                 dopamine_mv: 0,
@@ -121,6 +149,7 @@ class SpacewarsSimulation {
         this.dopamineSound = new THREE.Audio(this.audioListener);
         this.torpedoSound = new THREE.Audio(this.audioListener);
         this.deathStarExplosionSound = new THREE.Audio(this.audioListener);
+        this.tieLaserSound = new THREE.Audio(this.audioListener);
         this.initProceduralSounds();
 
         this.init();
@@ -217,7 +246,21 @@ class SpacewarsSimulation {
             this.targetLockSound.setBuffer(lockBuffer);
             this.targetLockSound.setVolume(0.85);
 
-            console.log('[Audio] ✓ Three.js AudioListener, Torpido ve Süpernova Ses Efektleri Hazır!');
+            // 7. TIE Fighter İkiz Lazer Sesi (Yüksek enerjili keskin plazma atış sesi)
+            const tieLaserDuration = 0.28;
+            const tieLaserBuffer = ctx.createBuffer(1, Math.floor(sampleRate * tieLaserDuration), sampleRate);
+            const tieLaserData = tieLaserBuffer.getChannelData(0);
+            for (let i = 0; i < tieLaserData.length; i++) {
+                const t = i / sampleRate;
+                const env = Math.exp(-t * 15.0);
+                const freq = 1280 * Math.exp(-t * 12.0) + 260;
+                const wave = Math.sin(2 * Math.PI * freq * t) + 0.35 * Math.sin(4 * Math.PI * freq * t);
+                tieLaserData[i] = wave * env * 0.75;
+            }
+            this.tieLaserSound.setBuffer(tieLaserBuffer);
+            this.tieLaserSound.setVolume(0.8);
+
+            console.log('[Audio] ✓ Three.js AudioListener, Torpido, TIE Lazer ve Süpernova Ses Efektleri Hazır!');
         } catch (e) {
             console.warn('[Audio] Ses motoru başlatma uyarısı:', e);
         }
@@ -244,6 +287,7 @@ class SpacewarsSimulation {
         const loadTasks = [
             { name: 'Trench Modülleri & Terminus', task: () => this.trench.init() },
             { name: 'TIE Fighter & Biyo-Pilot', task: () => this.tieFighter.init() },
+            { name: 'Dark X-Wing Düşman Filosu', task: () => this.darkXWingManager.init() },
             { name: 'Termal Egzoz Çukuru', task: () => this.exhaustPort.init() },
             { name: 'Nöral Hologram Konektom', task: () => this.hologram.init() },
             { name: 'Death Star İstasyonu', task: () => this.deathStar.init() }
@@ -987,8 +1031,8 @@ class SpacewarsSimulation {
         this.dirLight = new THREE.DirectionalLight(0xf0f6ff, 2.0);
         this.dirLight.position.set(35, 85, 35);
         this.dirLight.castShadow = true;
-        this.dirLight.shadow.mapSize.width = 2048;
-        this.dirLight.shadow.mapSize.height = 2048;
+        this.dirLight.shadow.mapSize.width = 1024;
+        this.dirLight.shadow.mapSize.height = 1024;
         this.dirLight.shadow.camera.near = 0.5;
         this.dirLight.shadow.camera.far = 350;
         this.dirLight.shadow.camera.left = -80;
@@ -1062,13 +1106,17 @@ class SpacewarsSimulation {
                     console.warn('[HUD Error]', hudErr);
                 }
 
-                // PROBOSCIS EXTENSION REFLEX (PER) İLE TORPİDO ATEŞLEME:
+                // PROBOSCIS EXTENSION REFLEX (PER) İLE TORPİDO VE LAZER ATEŞLEME:
                 // Sinek hedefin tam üstüne gelip besini tatmaya/ısırmaya çalıştığında WebSocket üzerinden
                 // motor komut ulaşır ve TIE Fighter ikiz proton torpidolarını fırlatır!
                 if (data.neural && data.neural.proboscis_trigger) {
                     if (this.isFinaleActive && this.deathStarHp > 0 && !this.torpedoes.isFired) {
                         this.fireProtonTorpedoes();
                     }
+                }
+                // SNN Sineğin hortum/bacak refleksiyle öndeki hedeflere karşı lazer karşı saldırısı:
+                if (data.neural && data.neural.tie_fire_laser) {
+                    this.fireTieLasers();
                 }
             } catch (e) {
                 console.error('[WS Parse Hatası]', e);
@@ -1436,12 +1484,175 @@ class SpacewarsSimulation {
         console.log('💥 [SUPERNOVA] ÖLÜM YILDIZI İMHA EDİLDİ! REAKTÖR ÇÖKTÜ! NİHAİ DOPAMİN ÖDÜLÜ (+100 mV)!');
     }
 
+    onXWingDestroyed(agentId, reason) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'enemy_destroyed', id: agentId, reason: reason }));
+        }
+
+        // 1. Fiziksel Temas / Gövde Çarpışması (Box3 Kesişimi)
+        if (reason === 'tie_physical_collision' || reason === 'tie_frontal_crash') {
+            this.onLaserHit();
+            const banner = document.getElementById('banner-xwing-overtake') || document.getElementById('banner-xwing-threat');
+            if (banner) {
+                banner.innerText = '💥 [GÖVDE ÇARPIŞMASI] X-Wing ile Çarpıştın! 1 HP X-Wing Patladı, TIE Hasar Aldı!';
+                banner.style.display = 'block';
+                banner.style.color = '#ef4444';
+                setTimeout(() => { banner.style.display = 'none'; }, 2600);
+            }
+            return;
+        }
+
+        // 2. TIE Fighter Lazer İsabeti (Düşman Vuruldu - Ödül)
+        if (reason === 'tie_laser_hit') {
+            try {
+                if (this.dopamineSound) {
+                    if (this.dopamineSound.isPlaying) this.dopamineSound.stop();
+                    this.dopamineSound.play();
+                }
+            } catch (e) {}
+
+            if (this.latestData && this.latestData.neural) {
+                this.latestData.neural.dopamine_mv = Math.min(100.0, (this.latestData.neural.dopamine_mv || 0) + 25.0);
+                this.updateHUD(this.latestData);
+            }
+
+            const banner = document.getElementById('banner-xwing-destroyed');
+            if (banner) {
+                banner.innerText = '🎯 DÜŞMAN X-WING LAZERLE VURULDU VE İMHA EDİLDİ! (+25 mV Dopamin Ödülü)';
+                banner.style.display = 'block';
+                banner.style.color = '#00ff88';
+                setTimeout(() => { banner.style.display = 'none'; }, 2400);
+            }
+            return;
+        }
+
+        // 3. Fıçı Tonosu Şok Dalgası veya Siper Duvarı Çarpışması
+        const banner = document.getElementById('banner-xwing-destroyed');
+        if (banner) {
+            banner.innerText = '💥 1 HP KURALI: DÜŞMAN X-WING İMHA EDİLDİ! (DUVAR ÇARPIŞMASI / FIÇI TONOSU GİRDABI)';
+            banner.style.display = 'block';
+            banner.style.color = '#ffcc00';
+            setTimeout(() => { banner.style.display = 'none'; }, 2200);
+        }
+    }
+
+    fireTieLasers() {
+        const now = performance.now();
+        if (now - this.lastTieLaserFireTime < 300) return; // 300ms atış aralığı (cooldown)
+        this.lastTieLaserFireTime = now;
+
+        const ship = (this.latestData && this.latestData.ship) ? this.latestData.ship : { x: 0, y: 32, z: 0 };
+        const shipPos = new THREE.Vector3(ship.x, ship.y, ship.z);
+
+        // İkiz Alt Çene Namluları (Gövdenin sol ve sağ altı)
+        const leftMuzzle = new THREE.Vector3(-0.95, -0.65, 3.4);
+        const rightMuzzle = new THREE.Vector3(0.95, -0.65, 3.4);
+
+        // Geminin oryantasyonuna göre namlu koordinatlarını döndür
+        const rotEuler = new THREE.Euler(-ship.pitch || 0, -ship.yaw || 0, -ship.roll || 0, 'YXZ');
+        leftMuzzle.applyEuler(rotEuler);
+        rightMuzzle.applyEuler(rotEuler);
+
+        const leftPos = shipPos.clone().add(leftMuzzle);
+        const rightPos = shipPos.clone().add(rightMuzzle);
+        const laserSpeed = 195.0; // İleri doğru yüksek hızlı plazma demeti (+z)
+
+        [leftPos, rightPos].forEach(pos => {
+            const mesh = new THREE.Mesh(this.sharedTieLaserGeo, this.sharedTieLaserMat);
+            mesh.position.copy(pos);
+            this.scene.add(mesh);
+            this.tieLasers.push({
+                mesh: mesh,
+                velocity: new THREE.Vector3(0, 0, laserSpeed),
+                createdZ: pos.z
+            });
+        });
+
+        try {
+            if (this.tieLaserSound) {
+                if (this.tieLaserSound.isPlaying) this.tieLaserSound.stop();
+                this.tieLaserSound.play();
+            }
+        } catch (e) {}
+
+        console.log('⚡ [TIE WEAPONS] İkiz Plazma Lazerleri Ateşlendi! (+195 m/s)');
+    }
+
+    updateTieLasers(dt) {
+        if (!this.tieLasers || this.tieLasers.length === 0) return;
+        const remaining = [];
+        const shipZ = (this.latestData && this.latestData.ship) ? this.latestData.ship.z : 0;
+
+        for (let i = 0; i < this.tieLasers.length; i++) {
+            const tl = this.tieLasers[i];
+            tl.mesh.position.z += tl.velocity.z * dt;
+
+            // X-Wing düşmanlarıyla Box3 çarpışma tespiti
+            let hitEnemyId = null;
+            if (this.darkXWingManager && this.darkXWingManager.activeEnemies) {
+                for (const [agentId, instance] of this.darkXWingManager.activeEnemies.entries()) {
+                    if (!instance.isAlive) continue;
+
+                    // Box3 Bounding Box kesişim kontrolü
+                    if (instance.box && instance.box.containsPoint(tl.mesh.position)) {
+                        hitEnemyId = agentId;
+                        break;
+                    }
+                    // Yüksek hız atlamasını önlemek için hacimsel mesafe kontrolü
+                    const edx = tl.mesh.position.x - instance.group.position.x;
+                    const edy = tl.mesh.position.y - instance.group.position.y;
+                    const edz = tl.mesh.position.z - instance.group.position.z;
+                    if (Math.abs(edx) < 5.8 && Math.abs(edy) < 2.4 && Math.abs(edz) < 5.5) {
+                        hitEnemyId = agentId;
+                        break;
+                    }
+                }
+            }
+
+            if (hitEnemyId) {
+                // 1 HP Kuralı: Vurulan X-Wing anında patlar!
+                this.darkXWingManager.destroyEnemy(hitEnemyId, 'tie_laser_hit');
+                this.scene.remove(tl.mesh);
+                continue;
+            }
+
+            // Menzil dışı temizlik (TIE'nin 180 metre önüne kadar siper boyunca ilerler)
+            if (tl.mesh.position.z < shipZ + 180) {
+                remaining.push(tl);
+            } else {
+                this.scene.remove(tl.mesh);
+            }
+        }
+        this.tieLasers = remaining;
+    }
+
+    spawnXWingLaser(spawnPos, speed = 135.0, agentId = '') {
+        if (this.finalePhase === 3) return;
+
+        // Rebel X-Wing Canlı Zümrüt Yeşili Plazma Lazeri (Paylaşılan Bellek - Zero GC)
+        const laserMesh = new THREE.Mesh(this.sharedLaserGeo, this.sharedXWingLaserMat);
+        laserMesh.position.copy(spawnPos);
+        this.scene.add(laserMesh);
+
+        const ship = (this.latestData && this.latestData.ship) ? this.latestData.ship : { x: 0, y: 32, z: 0 };
+        this.lasers.push({
+            mesh: laserMesh,
+            velocity: new THREE.Vector3(0, 0, speed), // Pozitif Z hızı: -z'den +z'ye doğru TIE'ye yaklaşır
+            previousZ: spawnPos.z - 1.0,
+            prevRz: (spawnPos.z - ship.z),
+            createdZ: spawnPos.z,
+            dodged: false,
+            wasThreat: true,
+            isXWingLaser: true,
+            agentId: agentId
+        });
+    }
+
     spawnLaser(isTwin = false) {
         // Lazerler siper boyunca kesintisiz devam eder (Yalnızca istasyon patladıktan sonra durur)
         if (this.finalePhase === 3) return;
 
         const ship = this.latestData.ship;
-        // KESİN KURAL (KIRMIZI ÇİZGİ): SADECE +z -> -z (KESİNLİKLE NEGATİF HIZ)
         const startZ = ship.z + (140 + Math.random() * 45) + (isTwin ? 12 : 0);
         const velocityZ = -(100 + Math.random() * 40);
 
@@ -1453,17 +1664,7 @@ class SpacewarsSimulation {
             startY = ship.y + (Math.random() - 0.5) * 6;
         }
 
-        const geo = new THREE.CylinderGeometry(0.18, 0.18, 6.0, 8);
-        geo.rotateX(Math.PI / 2);
-        
-        const mat = new THREE.MeshStandardMaterial({
-            color: 0x065f46,
-            emissive: 0x34d399, // Pastel nane/zümrüt yeşili
-            emissiveIntensity: 0.8,
-            roughness: 0.3
-        });
-
-        const laserMesh = new THREE.Mesh(geo, mat);
+        const laserMesh = new THREE.Mesh(this.sharedLaserGeo, this.sharedTurretLaserMat);
         laserMesh.position.set(startX, startY, startZ);
         this.scene.add(laserMesh);
 
@@ -1474,7 +1675,8 @@ class SpacewarsSimulation {
             prevRz: (startZ - ship.z),
             createdZ: ship.z,
             dodged: false,
-            wasThreat: false
+            wasThreat: false,
+            isXWingLaser: false
         });
     }
 
@@ -1484,21 +1686,10 @@ class SpacewarsSimulation {
 
         for (let i = 0; i < this.lasers.length; i++) {
             const l = this.lasers[i];
-
-            // KESİN MATEMATİKSEL LAZER GÜVENLİK KİLİDİ (KILL-SWITCH)
-            if (l.velocity.z >= 0 || l.mesh.position.z > l.previousZ) {
-                this.scene.remove(l.mesh);
-                continue;
-            }
-
+            const isForward = l.velocity.z > 0; // -z'den +z'ye (X-Wing lazeri)
             const prevZ = l.mesh.position.z;
             l.mesh.position.z += l.velocity.z * dt;
             l.previousZ = prevZ;
-
-            if (l.mesh.position.z >= prevZ) {
-                this.scene.remove(l.mesh);
-                continue;
-            }
 
             const rx = l.mesh.position.x - shipPos.x;
             const ry = l.mesh.position.y - shipPos.y;
@@ -1509,7 +1700,12 @@ class SpacewarsSimulation {
             const prevRz = (l.prevRz !== undefined) ? l.prevRz : (prevZ - shipPos.z);
             l.prevRz = rz;
 
-            if (dist < 50.0 && rz > -5.0 && lateralDist < 22.0) {
+            // Yaklaşma Kontrolü:
+            // İleri giden lazer (+z): rz < 2.0 iken arkadan yaklaşmaktadır
+            // Geri gelen lazer (-z): rz > -2.0 iken önden yaklaşmaktadır
+            const isApproaching = isForward ? (rz < 2.0) : (rz > -2.0);
+
+            if (dist < 55.0 && isApproaching && lateralDist < 24.0) {
                 l.wasThreat = true;
             }
 
@@ -1517,11 +1713,13 @@ class SpacewarsSimulation {
                 x: rx,
                 y: ry,
                 z: rz,
-                speed: Math.abs(l.velocity.z)
+                speed: Math.abs(l.velocity.z),
+                speed_z: l.velocity.z,
+                approaching: isApproaching
             });
 
             // 1. Doğrudan Gövde Çarpışması
-            const isDirectHit = (dist < 2.5) || (Math.abs(rz) < 2.0 && lateralDist < 2.2);
+            const isDirectHit = (dist < 2.5) || (Math.abs(rz) < 2.2 && lateralDist < 2.4);
 
             if (isDirectHit) {
                 if (this.latestData.neural && this.latestData.neural.is_barrel_rolling) {
@@ -1531,13 +1729,19 @@ class SpacewarsSimulation {
                     }
                 } else if (!this.isGameOver) {
                     this.onLaserHit();
+                    if (l.isXWingLaser && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'enemy_laser_hit', id: l.agentId }));
+                    }
                 }
                 this.scene.remove(l.mesh);
                 continue;
             }
 
             // 2. Otonom Dodge (Kaçınma) Kontrolü
-            const justPassedShip = (prevRz >= 0.0 && rz < 0.0);
+            const justPassedShip = isForward
+                ? (prevRz <= 0.0 && rz > 0.0)
+                : (prevRz >= 0.0 && rz < 0.0);
+
             if (justPassedShip && !l.dodged) {
                 l.dodged = true;
                 this.onSuccessfulDodge();
@@ -1545,13 +1749,18 @@ class SpacewarsSimulation {
 
             // 3. Fıçı Tonosu Sırasında Yakındaki Tehditleri Savuşturma
             if (this.latestData.neural && this.latestData.neural.is_barrel_rolling && !l.dodged) {
-                if (dist < 32.0 && rz > -5.0) {
+                if (dist < 32.0 && isApproaching) {
                     l.dodged = true;
                     this.onSuccessfulDodge();
                 }
             }
 
-            if (l.mesh.position.z > shipPos.z - 80 && l.mesh.position.z < shipPos.z + 220) {
+            // Menzil dışı temizlik
+            const inRange = isForward
+                ? (l.mesh.position.z < shipPos.z + 240 && l.mesh.position.z > shipPos.z - 140)
+                : (l.mesh.position.z > shipPos.z - 80 && l.mesh.position.z < shipPos.z + 220);
+
+            if (inRange) {
                 remaining.push(l);
             } else {
                 this.scene.remove(l.mesh);
@@ -1563,6 +1772,12 @@ class SpacewarsSimulation {
     }
 
     onSuccessfulDodge() {
+        const now = performance.now();
+        if (this.lastDodgeTime && (now - this.lastDodgeTime < 280)) {
+            return; // Çoklu salvo darbelerinde aynı anda 4 kez tetiklenmeyi engelle (Debounce)
+        }
+        this.lastDodgeTime = now;
+
         try {
             if (this.barrelRollSound) {
                 if (this.barrelRollSound.isPlaying) this.barrelRollSound.stop();
@@ -1791,7 +2006,44 @@ class SpacewarsSimulation {
                     lockEl.style.color = '#ffb700';
                 }
             }
-            // 6. Uyarı Bannerları
+
+            // 7. Düşman Dark X-Wing Telemetrisi (Multi-Agent SNN & Overtaking Dynamics)
+            const enemies = data.enemies || [];
+            const xwingStatusEl = document.getElementById('val-xwing-status');
+            const xwingBanner = document.getElementById('banner-xwing-threat');
+            const overtakeBanner = document.getElementById('banner-xwing-overtake');
+            const shipZ = data.ship?.z || 0;
+
+            if (xwingStatusEl) {
+                const aliveEnemies = enemies.filter(e => e.is_alive !== false);
+                if (aliveEnemies.length > 0) {
+                    const inFront = aliveEnemies.filter(e => (e.z - shipZ) > 0.5);
+                    const behind = aliveEnemies.filter(e => (e.z - shipZ) <= 0.5);
+                    if (inFront.length > 0) {
+                        const closestFrontDist = Math.min(...inFront.map(e => e.z - shipZ));
+                        xwingStatusEl.innerText = `🚨 ${inFront.length} Solladı (+${closestFrontDist.toFixed(0)}m Ön Engel!)`;
+                        xwingStatusEl.style.color = '#ef4444';
+                    } else {
+                        const nearestDist = Math.min(...behind.map(e => Math.abs(shipZ - e.z)));
+                        xwingStatusEl.innerText = `${aliveEnemies.length} Takipçi (${nearestDist.toFixed(0)}m - Arkada)`;
+                        xwingStatusEl.style.color = '#ea580c';
+                    }
+                } else {
+                    xwingStatusEl.innerText = 'Temiz (0 Tehdit)';
+                    xwingStatusEl.style.color = '#94a3b8';
+                }
+            }
+
+            const hasEnemyInFront = enemies.some(e => e.is_alive !== false && (e.z - shipZ) > 0.5 && (e.z - shipZ) < 55.0);
+            if (overtakeBanner) {
+                overtakeBanner.style.display = hasEnemyInFront && !this.isFinaleActive ? 'block' : 'none';
+            }
+            if (xwingBanner) {
+                const hasNearbyEnemyBehind = enemies.some(e => e.is_alive !== false && (shipZ - e.z) < 70 && (shipZ - e.z) > 0);
+                xwingBanner.style.display = (!hasEnemyInFront && hasNearbyEnemyBehind && !this.isFinaleActive) ? 'block' : 'none';
+            }
+
+            // 8. Uyarı Bannerları
             const rollBanner = document.getElementById('banner-barrel-roll');
             if (rollBanner) {
                 rollBanner.style.display = neural.is_barrel_rolling ? 'block' : 'none';
@@ -1810,18 +2062,23 @@ class SpacewarsSimulation {
         const ship = this.latestData.ship;
 
         if (this.cameraMode === 1) {
-            // Mode 1: Chase Cam (Sinematik Arkadan Takip - Gemiyi daima ideal mesafeden takip eder)
-            const targetX = ship.x;
-            const targetY = ship.y + 5.2;
-            const targetZ = ship.z - 26.0;
+            // Mode 1: Sinematik 3. Şahıs Geniş Açı Takip (TIE Fighter + Kovalayan X-Wing'ler Aynı Kadrajda)
+            // Kamera arkadan kovalayan X-Wing'lerin (z = ship.z - 22 ~ -36) de gerisine ve yukarıya çekilir
+            const targetX = ship.x * 0.75;
+            const targetY = ship.y + 10.5;
+            const targetZ = ship.z - 46.0;
             
-            // X ve Y eksenlerinde yumuşak yaylanma, Z ekseninde (ileri hız) senkronize takip
-            const smoothFactor = Math.min(1.0, 16.0 * dt);
+            // X ve Y eksenlerinde yumuşak yaylanma, Z ekseninde senkronize takip
+            const smoothFactor = Math.min(1.0, 14.0 * dt);
             this.camera.position.x += (targetX - this.camera.position.x) * smoothFactor;
             this.camera.position.y += (targetY - this.camera.position.y) * smoothFactor;
-            this.camera.position.z = targetZ; // İleri eksende asla kopma yaşanmaz
+            this.camera.position.z = targetZ;
             
-            this.camera.lookAt(this.camera.position.x * 0.7 + ship.x * 0.3, ship.y + 0.8, ship.z + 28.0);
+            // Bakış odağı: TIE Fighter'ın hafif önü (Arkadaki X-Wing'ler alt/orta planda, TIE merkez odakta)
+            const lookX = ship.x * 0.85;
+            const lookY = ship.y + 1.2;
+            const lookZ = ship.z + 10.0;
+            this.camera.lookAt(lookX, lookY, lookZ);
 
         } else if (this.cameraMode === 2) {
             // Mode 2: Cockpit Zoom (Şeffaf ön kokpit camından içeriye, sineğe doğrudan bakış)
@@ -1856,9 +2113,13 @@ class SpacewarsSimulation {
             }
 
         } else if (this.cameraMode === 5) {
-            // Mode 5: Trench Wall Cinematics (Siper Duvarı PBR Metalik & Yansıma Gözlemi)
-            this.camera.position.set(ship.x + 20.0, ship.y + 14.0, ship.z - 10.0);
-            this.camera.lookAt(ship.x - 50.0, ship.y + 18.0, ship.z + 20.0);
+            // Mode 5: Düşman Dark X-Wing Takip Kamerası (Rear Threat & Dogfight Cam)
+            // TIE Fighter'ın hemen önünden arkaya doğru, kovalayan X-Wing'lere ve arkaya bakar
+            const targetX = ship.x;
+            const targetY = ship.y + 2.4;
+            const targetZ = ship.z + 14.0;
+            this.camera.position.set(targetX, targetY, targetZ);
+            this.camera.lookAt(ship.x, ship.y + 0.8, ship.z - 45.0);
         }
 
         // Patlama / Çarpışma Ekran Sarsıntısı (Camera Trauma Shake)
@@ -1945,8 +2206,9 @@ class SpacewarsSimulation {
             if (e.key === '2') this.setCameraMode(2);
             if (e.key === '3') this.setCameraMode(3);
             if (e.key === '4') this.setCameraMode(4);
+            if (e.key === '5') this.setCameraMode(5);
             if (e.key.toLowerCase() === 'd') this.injectDopamine(40.0);
-            if (e.key.toLowerCase() === 'l') this.spawnLaser(true);
+            if (e.key.toLowerCase() === 'l') this.fireTieLasers();
             if (e.key.toLowerCase() === 'f') this.handleFinaleButton();
             if (e.key.toLowerCase() === 'r' && (this.isGameOver || this.isVictory || this.finalePhase === 3)) {
                 this.restartGame();
@@ -1958,8 +2220,9 @@ class SpacewarsSimulation {
         document.getElementById('btn-cam-cockpit')?.addEventListener('click', () => this.setCameraMode(2));
         document.getElementById('btn-cam-pilot')?.addEventListener('click', () => this.setCameraMode(3));
         document.getElementById('btn-cam-deathstar')?.addEventListener('click', () => this.setCameraMode(4));
+        document.getElementById('btn-cam-enemy')?.addEventListener('click', () => this.setCameraMode(5));
         document.getElementById('btn-dopamine')?.addEventListener('click', () => this.injectDopamine(40.0));
-        document.getElementById('btn-laser')?.addEventListener('click', () => this.spawnLaser(true));
+        document.getElementById('btn-laser')?.addEventListener('click', () => this.fireTieLasers());
         document.getElementById('btn-finale')?.addEventListener('click', () => this.handleFinaleButton());
         document.getElementById('btn-restart')?.addEventListener('click', () => this.restartGame());
         document.getElementById('btn-modal-restart')?.addEventListener('click', () => this.restartGame());
@@ -1967,7 +2230,7 @@ class SpacewarsSimulation {
 
     setCameraMode(mode) {
         this.cameraMode = mode;
-        ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar'].forEach((id, idx) => {
+        ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar', 'btn-cam-enemy'].forEach((id, idx) => {
             const btn = document.getElementById(id);
             if (btn) {
                 if (idx + 1 === mode) btn.classList.add('active');
@@ -2050,6 +2313,17 @@ class SpacewarsSimulation {
         });
         this.lasers = [];
 
+        if (this.tieLasers) {
+            this.tieLasers.forEach(l => {
+                if (l.mesh) this.scene.remove(l.mesh);
+            });
+            this.tieLasers = [];
+        }
+
+        if (this.darkXWingManager?.reset) {
+            this.darkXWingManager.reset();
+        }
+
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'reset_proboscis' }));
         }
@@ -2097,11 +2371,6 @@ class SpacewarsSimulation {
             }
 
             // İZAFI HIZ EŞİTLEME (TARGET RELATIVE VELOCITY MATCHING):
-            // Sinek hedefe (Ölüm Yıldızı / Egzoz Deliği) atış menziline (firingRange = 38m) yaklaştığında,
-            // Death Star ve Egzoz Deliğinin Z-eksenindeki konumunu TIE Fighter'ın ileri hareketiyle eşitler.
-            // TIE Fighter'ın hızı asla sıfırlanmaz / kesilmez (35 m/s momentum devam eder).
-            // İki nesne aynı hızla ilerler, aralarındaki izafi mesafe (relative distance) sabit kalır
-            // ve sinek modelin içinden geçmek (clipping) yerine hedefin tam önünde asılı kalıp ateş eder.
             try {
                 if (this.isFinaleActive && this.deathStarHp > 0) {
                     const distanceToTarget = this.finalTargetZ - ship.z;
@@ -2109,7 +2378,6 @@ class SpacewarsSimulation {
                         this.isVelocitySynced = true;
                         this.finalTargetZ = ship.z + this.firingRange;
 
-                        // Egzoz Deliği ve Terminus Duvarı Z koordinatını eşitle
                         if (this.exhaustPort?.updatePosition) {
                             this.exhaustPort.updatePosition(this.finalTargetZ);
                         }
@@ -2132,7 +2400,6 @@ class SpacewarsSimulation {
             }
 
             // 2b. Hiperspace Yıldız Alanı (Starfield Particle System):
-            // Hız illüzyonunun korunması için parçacıklar kameraya doğru kesintisiz yüksek hızda akar
             try {
                 if (this.starfield?.update) {
                     this.starfield.update(ship.z, dt, ship.speed || 35.0);
@@ -2148,6 +2415,16 @@ class SpacewarsSimulation {
                 }
             } catch (errTie) {
                 console.warn('[GameLoop Recovery] TIE Fighter animasyon hatası:', errTie);
+            }
+
+            // 3b. Çoklu-Ajan Dark X-Wing Düşman Filosu (Multi-Agent SNN & 1 HP Glass Cannon)
+            try {
+                if (this.darkXWingManager?.update) {
+                    const isTieRolling = Boolean(this.latestData?.neural?.is_barrel_rolling);
+                    this.darkXWingManager.update(dt, this.latestData.enemies, ship, isTieRolling);
+                }
+            } catch (errXWing) {
+                console.warn('[GameLoop Recovery] Dark X-Wing filo güncelleme hatası:', errXWing);
             }
 
             // 4. Termal Egzoz Çukuru Kontrolü (Görünmez Fallback Hedef ile Çökme Korumalı)
@@ -2213,13 +2490,20 @@ class SpacewarsSimulation {
                 }
 
                 const relativeLasers = this.updateLasers(dt, ship);
+                this.updateTieLasers(dt);
 
-                // Python SNN Ommatidia'ya Görsel Geri Bildirim Fırlat (Her koşulda geçerli hedef garantili)
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                // Python SNN Ommatidia'ya Görsel Geri Bildirim Fırlat (30 Hz Throttled & Sadece En Yakın 4 Tehdit)
+                this.visualFeedbackFrameCounter = (this.visualFeedbackFrameCounter || 0) + 1;
+                if (this.visualFeedbackFrameCounter % 2 === 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    const topThreatLasers = relativeLasers
+                        .filter(l => l.approaching)
+                        .slice(0, 4);
+
                     this.ws.send(JSON.stringify({
                         type: 'visual_feedback',
-                        lasers: relativeLasers,
-                        exhaust_target: exhaustTargetPos
+                        lasers: topThreatLasers,
+                        exhaust_target: exhaustTargetPos,
+                        is_finale: Boolean(this.isFinaleActive)
                     }));
                 }
             } catch (errLasers) {
@@ -2254,4 +2538,5 @@ class SpacewarsSimulation {
 // Uygulamayı Başlat
 window.addEventListener('DOMContentLoaded', () => {
     window.sim = new SpacewarsSimulation();
+    window.app = window.sim;
 });

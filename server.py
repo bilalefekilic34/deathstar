@@ -23,9 +23,9 @@ if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
 try:
-    from deathstarv2.snn_ommatidia_engine import DrosophilaSNNBrain
+    from deathstarv2.snn_ommatidia_engine import DrosophilaSNNBrain, EnemySquadronManager
 except ImportError:
-    from snn_ommatidia_engine import DrosophilaSNNBrain
+    from snn_ommatidia_engine import DrosophilaSNNBrain, EnemySquadronManager
 
 
 app = FastAPI(title="Death Star v2: Drosophila SNN Flight Control")
@@ -109,6 +109,8 @@ async def websocket_endpoint(websocket: WebSocket):
         "exhaust_target": None
     }
     brain.reset_proboscis()
+    squadron = EnemySquadronManager(max_enemies=2)
+    squadron.reset()
     
     dt = 1.0 / 60.0  # 60 Hz
     last_time = asyncio.get_event_loop().time()
@@ -124,12 +126,29 @@ async def websocket_endpoint(websocket: WebSocket):
                 if msg_type == "visual_feedback":
                     client_visual_input["lasers"] = data.get("lasers", [])
                     client_visual_input["exhaust_target"] = data.get("exhaust_target", None)
+                    client_visual_input["is_finale"] = bool(data.get("is_finale", False))
                     
                 elif msg_type == "dodge_success":
                     brain.on_dodge_success()
                     
                 elif msg_type == "laser_hit":
                     brain.on_laser_hit()
+
+                elif msg_type in ("enemy_crashed", "enemy_destroyed"):
+                    agent_id = data.get("id", "")
+                    reason = data.get("reason", "wall_crash")
+                    squadron.on_enemy_hit_or_crashed(agent_id, reason)
+                    if reason == "tie_laser_hit":
+                        brain.inject_dopamine(25.0)
+                        print(f"[WebSocket] 🎯 TIE Fighter Lazer İsabeti! {agent_id} imha edildi! +25 mV Dopamin!")
+                    elif reason == "tie_physical_collision":
+                        brain.on_laser_hit()
+                        print(f"[WebSocket] 💥 TIE Fighter X-Wing ile ÇARPIŞTI! {agent_id} patladı! Hasar/Ceza uygulandı!")
+
+                elif msg_type == "enemy_laser_hit":
+                    # X-Wing'in lazeri TIE Fighter'a isabet etti: Biyolojik stres & ceza
+                    brain.on_laser_hit()
+                    print("[WebSocket] 💥 TIE Fighter X-Wing Lazeriyle Vuruldu!")
 
                 elif msg_type == "exhaust_entered":
                     # Egzoz çukuruna ulaşıldı! +40 mV Dopamin & +100 Plastisite
@@ -150,6 +169,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 elif msg_type == "reset_proboscis":
                     brain.reset_proboscis()
+                    squadron.reset()
                     
                 elif msg_type == "inject_dopamine":
                     amount = float(data.get("amount", 40.0))
@@ -172,16 +192,43 @@ async def websocket_endpoint(websocket: WebSocket):
             last_time = t_now
             step_dt = min(elapsed, 0.05) if elapsed > 0 else dt
 
-            # 1. 750 Ommatidia Görsel Girdi İşleme
+            # 1. Düşman Dark X-Wing Filosu (Multi-Agent SNN) Simülasyonu
+            enemy_results = squadron.step(
+                step_dt,
+                tie_state=ship_state,
+                is_tie_barrel_rolling=brain.is_barrel_rolling,
+                is_finale=client_visual_input.get("is_finale", False)
+            )
+
+            # 2. TIE Fighter'ın Önündeki Sollayan X-Wing'leri (Frontal Obstacles) Çıkar
+            frontal_obstacles = []
+            for enemy in squadron.enemies.values():
+                if enemy.is_alive:
+                    rel_z = enemy.z - ship_state["z"]
+                    # X-Wing TIE Fighter'ın önündeyse (+0.2m < rel_z < 75.0m):
+                    if 0.2 < rel_z < 75.0:
+                        frontal_obstacles.append({
+                            "id": enemy.agent_id,
+                            "x": float(enemy.x - ship_state["x"]),
+                            "y": float(enemy.y - ship_state["y"]),
+                            "z": float(rel_z),
+                            "vx": float(enemy.vx - ship_state["vx"]),
+                            "vy": float(enemy.vy - ship_state["vy"]),
+                            "vz": float(ship_state["vz"] - enemy.vz),
+                            "radius": 5.2
+                        })
+
+            # 3. 750 Ommatidia Görsel Girdi İşleme (Lazerler + Egzoz Deliği + Sollayan X-Wing Looming Engelleri)
             visual_res = brain.eye.process_visual_stimuli(
                 lasers=client_visual_input["lasers"],
-                exhaust_target=client_visual_input["exhaust_target"]
+                exhaust_target=client_visual_input["exhaust_target"],
+                frontal_obstacles=frontal_obstacles
             )
             
-            # 2. SNN & Motor Tork Hesabı
+            # 4. TIE Fighter SNN & Motor Tork Hesabı
             motor_out = brain.step(step_dt, visual_res)
             
-            # 3. TIE Fighter Kinematik Entegrasyonu (Siper İçinde Sınırlar)
+            # 5. TIE Fighter Kinematik Entegrasyonu (Siper İçinde Sınırlar)
             # Roll, Pitch, Yaw
             ship_state["roll"] += motor_out["roll_torque"] * step_dt
             if motor_out["is_barrel_rolling"]:
@@ -214,7 +261,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if rx_task.done():
                 break
 
-            # 4. 60Hz Telemetri Paketi
+            # 6. 60Hz Çoklu-Ajan (Multi-Agent) Telemetri Paketi
             payload = {
                 "ship": {
                     "x": float(ship_state["x"]),
@@ -225,6 +272,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "yaw": float(ship_state["yaw"]),
                     "speed": float(ship_state["vz"])
                 },
+                "enemies": enemy_results,
                 "fly": {
                     "wing_l": float(motor_out["wing_angle_l"]),
                     "wing_r": float(motor_out["wing_angle_r"]),
@@ -239,20 +287,25 @@ async def websocket_endpoint(websocket: WebSocket):
                     "dopamine_mv": float(motor_out["dopamine_mv"]),
                     "is_barrel_rolling": bool(motor_out["is_barrel_rolling"]),
                     "proboscis_trigger": bool(motor_out.get("proboscis_trigger", False)),
+                    "tie_fire_laser": bool(motor_out.get("tie_fire_laser", False)),
                     "v_proboscis": float(motor_out["neuron_potentials"].get("v_proboscis", -70.0))
                 },
                 "ommatidia": {
                     "active_count": visual_res["active_ommatidia_count"],
                     "closest_dist": visual_res["closest_laser_dist"],
                     "closest_looming": visual_res["closest_looming"],
-                    "target_detected": visual_res["target_detected"]
+                    "target_detected": visual_res["target_detected"],
+                    "obstacle_detected": bool(len(frontal_obstacles) > 0),
+                    "closest_obstacle_dist": float(visual_res.get("closest_obstacle_dist", 999.0))
                 },
                 "learning": motor_out.get("learning", {}),
                 "boss_targeting": motor_out.get("boss_targeting", {})
             }
             
             await websocket.send_text(json.dumps(payload))
-            await asyncio.sleep(dt)
+            step_duration = asyncio.get_event_loop().time() - t_now
+            sleep_time = max(0.001, dt - step_duration)
+            await asyncio.sleep(sleep_time)
             
     except WebSocketDisconnect:
         print("[WebSocket] İstemci ayrıldı.")

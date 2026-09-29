@@ -84,53 +84,14 @@ export class BiologicalTieFighter {
 
                     this.shipGroup.add(this.tieMesh);
 
-                    // Gemiye Özel 360° Sinematik Metalik Aydınlatma Teçhizatı (Metallic Specular Hero Rig):
-                    // 1. Arka-Üst Projektör (Chase Cam): Arkadan takipte gövde kavisinde, pylonlarda ve kanat kirişlerinde kristal netliğinde specular parıltı üretir
-                    const shipRearSpec = new THREE.DirectionalLight(0xffffff, 2.6);
-                    shipRearSpec.position.set(4.0, 7.5, -12.0);
-                    this.shipGroup.add(shipRearSpec);
-                    this.shipGroup.add(shipRearSpec.target);
-                    shipRearSpec.target.position.set(0, 0, 0);
-
-                    // 2. Sol-Arka Denge Işığı (Cool Specular Fill)
-                    const shipRearFill = new THREE.DirectionalLight(0xa5c4e8, 1.8);
-                    shipRearFill.position.set(-6.0, 4.5, -10.0);
-                    this.shipGroup.add(shipRearFill);
-                    this.shipGroup.add(shipRearFill.target);
-                    shipRearFill.target.position.set(0, 0, 0);
-
-                    // 3. Tepe Aydınlatması (Gövde ve Kokpit Üstü Çeliği)
-                    const shipTopLight = new THREE.PointLight(0xf8fafc, 2.2, 30);
-                    shipTopLight.position.set(0, 4.5, 0);
+                    // Gemiye Özel Optimize Aydınlatma:
+                    // 1. Üst Metalik Parlama Işığı (Specular Highlight)
+                    const shipTopLight = new THREE.PointLight(0xf1f5f9, 2.0, 16);
+                    shipTopLight.position.set(0, 3.5, 0);
                     this.shipGroup.add(shipTopLight);
 
-                    // 4. Yan Dış Kanat Metalik Vurgu Işıkları: Dış yüzeydeki taşıyıcı kirişleri ve çerçeveleri parlatır
-                    const leftWingOuter = new THREE.PointLight(0xe0f2fe, 2.2, 20);
-                    leftWingOuter.position.set(-5.5, 2.0, -1.0);
-                    this.shipGroup.add(leftWingOuter);
-
-                    const rightWingOuter = new THREE.PointLight(0xe0f2fe, 2.2, 20);
-                    rightWingOuter.position.set(5.5, 2.0, -1.0);
-                    this.shipGroup.add(rightWingOuter);
-
-                    // 5. İç Kanat ve Pylon Vurgu Işıkları: Pylon borusunu, boğaz halkalarını ve iç kanat kafesini aydınlatır
-                    const leftPylonLight = new THREE.PointLight(0xdbeafe, 1.8, 14);
-                    leftPylonLight.position.set(-2.0, 1.5, -1.0);
-                    this.shipGroup.add(leftPylonLight);
-
-                    const rightPylonLight = new THREE.PointLight(0xdbeafe, 1.8, 14);
-                    rightPylonLight.position.set(2.0, 1.5, -1.0);
-                    this.shipGroup.add(rightPylonLight);
-
-                    // 6. Ön Karşı Işık (Cockpit Camından Sinek Pilotu ve Ön Gövdeyi Aydınlatır)
-                    const shipFrontSpec = new THREE.DirectionalLight(0xdbeafe, 1.5);
-                    shipFrontSpec.position.set(0, 3.5, 12.0);
-                    this.shipGroup.add(shipFrontSpec);
-                    this.shipGroup.add(shipFrontSpec.target);
-                    shipFrontSpec.target.position.set(0, 0, 0);
-
-                    // 7. İkiz İyon Motoru Arka Dolgu Işığı
-                    const engineGlowLight = new THREE.PointLight(0xff2222, 2.8, 16);
+                    // 2. İkiz İyon Motoru Arka Dolgu Işığı
+                    const engineGlowLight = new THREE.PointLight(0xff2222, 2.2, 8);
                     engineGlowLight.position.set(0, 0, -2.6);
                     this.shipGroup.add(engineGlowLight);
 
@@ -241,12 +202,12 @@ export class BiologicalTieFighter {
         wingShape.quadraticCurveTo(0.6, -0.6, 0, 0);
 
         const wingGeo = new THREE.ShapeGeometry(wingShape);
-        const wingMat = new THREE.MeshPhysicalMaterial({
+        const wingMat = new THREE.MeshStandardMaterial({
             color: 0xccf0ff,
-            transmission: 0.85,
             opacity: 0.65,
             transparent: true,
-            roughness: 0.1,
+            roughness: 0.2,
+            metalness: 0.1,
             side: THREE.DoubleSide
         });
 

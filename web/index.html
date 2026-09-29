@@ -85,6 +85,18 @@
             <div class="alert-banner alert-proboscis" id="banner-proboscis" style="display: none;">
                 👅 PROBOSCIS REFLEKSİ (PER): SİNEK HORTUMUYLA BESİNE HAMLE YAPTI -> PROTON TORPİDOLARI ATEŞLENDİ!
             </div>
+            <div class="alert-banner" id="banner-xwing-threat" style="display: none; background: rgba(234, 88, 12, 0.25); border-color: #ea580c; color: #ffedd5; box-shadow: 0 0 25px rgba(234, 88, 12, 0.5);">
+                ⚠️ DÜŞMAN DARK X-WING ARKADAN YAKLAŞIYOR! (SİNEK BEYNİ LC10a KİLİTLENDİ - 1 HP)!
+            </div>
+            <div class="alert-banner" id="banner-xwing-overtake" style="display: none; background: rgba(239, 68, 68, 0.35); border-color: #ef4444; color: #fee2e2; box-shadow: 0 0 30px rgba(239, 68, 68, 0.7);">
+                🚨 TEHLİKE: X-WING ÖNÜNE GEÇTİ! LOOMING ÇARPIŞMA ENGELİ — MANEVRA YAP!
+            </div>
+            <div class="alert-banner" id="banner-weapons-locked" style="display: none; background: rgba(245, 158, 11, 0.3); border-color: #f59e0b; color: #fef3c7; box-shadow: 0 0 25px rgba(245, 158, 11, 0.5);">
+                🔒 [SİLAH KİLİTLİ] TIE Fighter Pasif Av Modunda! X-Wing'lere Karşı Silah Yoktur — Yalnızca Kaçış ve Savunma!
+            </div>
+            <div class="alert-banner" id="banner-xwing-destroyed" style="display: none; background: rgba(34, 197, 94, 0.25); border-color: #22c55e; color: #dcfce7; box-shadow: 0 0 25px rgba(34, 197, 94, 0.5);">
+                💥 1 HP KURALI: DÜŞMAN X-WING İMHA EDİLDİ! (DUVAR ÇARPIŞMASI / FIÇI TONOSU GİRDABI)
+            </div>
             <div class="alert-banner alert-victory" id="banner-victory" style="display: none;">
                 🏆 ÖLÜM YILDIZI İMHA EDİLDİ! REAKTÖR ÇÖKTÜ! NİHAİ DOPAMİN PATLAMASI (+100 mV)!
             </div>
@@ -127,6 +139,10 @@
                 <div class="telemetry-row" style="margin-top: 4px; border-top: 1px dashed rgba(255,0,170,0.3); padding-top: 4px;">
                     <span>Proboscis (PER) Refleksi:</span>
                     <span class="telemetry-val" id="val-proboscis" style="color: #ff00aa;">HAZIR (-70.0 mV)</span>
+                </div>
+                <div class="telemetry-row" style="margin-top: 4px; border-top: 1px dashed rgba(234,88,12,0.4); padding-top: 4px;">
+                    <span>Düşman Dark X-Wing (SNN):</span>
+                    <span class="telemetry-val" id="val-xwing-status" style="color: #ea580c;">0 Takipçi (1 HP)</span>
                 </div>
             </div>
 
@@ -189,12 +205,13 @@
                     <button class="hud-btn" id="btn-cam-cockpit" title="Şeffaf Kokpitteki Sineğe Yakın Çekim (Tuş: 2)">2. SİNEK KOKPİT</button>
                     <button class="hud-btn" id="btn-cam-pilot" title="Sineğin Gözünden Kokpit İçi (Tuş: 3)">3. PİLOT POV</button>
                     <button class="hud-btn" id="btn-cam-deathstar" title="Ölüm Yıldızı 3D Modeli Gözlem (Tuş: 4)">4. ÖLÜM YILDIZI</button>
+                    <button class="hud-btn" id="btn-cam-enemy" title="Düşman Dark X-Wing Takip Kamerası (Tuş: 5)">5. DÜŞMAN X-WING</button>
                 </div>
 
                 <div class="camera-controls" style="margin-top: 6px;">
                     <button class="hud-btn hud-btn-finale" id="btn-finale" title="Ölüm Yıldızı Egzoz Deliği Final Koşusunu Başlat (Tuş: F)">🎯 FİNALİ BAŞLAT (F)</button>
                     <button class="hud-btn hud-btn-dopamine" id="btn-dopamine" title="Mushroom Body'ye +40 mV Dopamin Ver (Tuş: D)">🌟 DOPAMİN (+40mV)</button>
-                    <button class="hud-btn" id="btn-laser" title="Manuel Tehdit Lazer Fırlat (Tuş: L)">⚡ LAZER FIRLAT</button>
+                    <button class="hud-btn hud-btn-laser" id="btn-laser" title="TIE Fighter İkiz Lazerlerini Ateşle (Tuş: L)" style="border-color: #00ff88; color: #00ff88;">⚡ İKİZ LAZER (L)</button>
                 </div>
             </div>
         </div>

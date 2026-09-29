@@ -427,12 +427,217 @@ def create_death_star():
     print(f"✓ death_star.glb oluşturuldu ({len(glb_data)} bayt)")
 
 
+def create_dark_x_wing():
+    """
+    Dark X-Wing GLTF Modeli (Sketchfab Dark X-Wing Referanslı).
+    - Agresif koyu karbon/titanyum gövde (#181c22)
+    - Canlı yarış turuncusu şeritler ve paneller (#ea580c)
+    - X konfigürasyonunda açılmış 4 adet S-Foil saldırı kanadı
+    - 4 adet yüksek itişli türbin motoru ve parlayan iyon egzozları
+    - 4 adet kanat ucu uzun menzilli Taim & Bak KX9 lazer topları
+    - Şeffaf kokpit camı ve astromech droid kubbesi
+    """
+    scene = trimesh.Scene()
+    
+    # Renk Paletleri
+    c_hull_dark = [24, 28, 34, 255]       # Koyu mat karbon gövde
+    c_hull_metal = [55, 62, 72, 255]      # Silah metali / mekanik parçalar
+    c_orange = [234, 88, 12, 255]         # İkonik Dark X-Wing yarış turuncusu
+    c_glass = [140, 195, 245, 120]        # Şeffaf kokpit camı
+    c_engine_glow = [255, 80, 20, 255]    # Parlak turuncu iyon alevi
+    c_droid_silver = [200, 210, 225, 255] # Astromech droid kubbesi
+    
+    # 1. ANA GÖVDE (FUSELAGE)
+    nose_body = trimesh.creation.box([1.7, 1.1, 4.6])
+    v = nose_body.vertices.copy()
+    factor = np.clip((2.3 - v[:, 2]) / 4.6 * 0.75 + 0.25, 0.25, 1.0)
+    v[:, 0] *= factor
+    v[:, 1] *= factor
+    nose_body.vertices = v
+    nose_body.apply_translation([0, 0, 3.8])
+    nose_body.visual.face_colors = c_hull_dark
+    scene.add_geometry(nose_body, node_name="nose_body")
+    
+    nose_stripe = trimesh.creation.box([0.38, 0.05, 4.2])
+    v_s = nose_stripe.vertices.copy()
+    f_s = np.clip((2.1 - v_s[:, 2]) / 4.2 * 0.75 + 0.25, 0.25, 1.0)
+    v_s[:, 0] *= f_s
+    nose_stripe.vertices = v_s
+    nose_stripe.apply_translation([0, 0.54, 3.8])
+    nose_stripe.visual.face_colors = c_orange
+    scene.add_geometry(nose_stripe, node_name="nose_stripe")
+    
+    probe = trimesh.creation.cylinder(radius=0.06, height=0.9)
+    probe.apply_translation([0, 0, 6.45])
+    probe.visual.face_colors = c_hull_metal
+    scene.add_geometry(probe, node_name="nose_sensor_probe")
+    
+    mid_body = trimesh.creation.box([2.1, 1.35, 3.0])
+    mid_body.apply_translation([0, 0, 0.0])
+    mid_body.visual.face_colors = c_hull_dark
+    scene.add_geometry(mid_body, node_name="mid_fuselage")
+    
+    for side in [-1, 1]:
+        vent = trimesh.creation.box([0.15, 0.5, 2.4])
+        vent.apply_translation([side * 1.1, 0.1, 0.0])
+        vent.visual.face_colors = c_orange
+        scene.add_geometry(vent, node_name=f"fuselage_side_panel_{side}")
+        
+    aft_body = trimesh.creation.box([2.4, 1.5, 2.9])
+    aft_body.apply_translation([0, 0, -2.95])
+    aft_body.visual.face_colors = c_hull_dark
+    scene.add_geometry(aft_body, node_name="aft_fuselage")
+    
+    dorsal_spine = trimesh.creation.box([0.7, 0.35, 4.8])
+    dorsal_spine.apply_translation([0, 0.85, -1.8])
+    dorsal_spine.visual.face_colors = c_hull_metal
+    scene.add_geometry(dorsal_spine, node_name="dorsal_spine")
+    
+    # 2. KOKPİT & ŞEFFAF KANOPİ
+    canopy_box = trimesh.creation.box([1.2, 0.7, 2.0])
+    v_c = canopy_box.vertices.copy()
+    for i in range(len(v_c)):
+        if v_c[i, 2] > 0:
+            v_c[i, 1] -= 0.35
+            v_c[i, 0] *= 0.65
+    canopy_box.vertices = v_c
+    canopy_box.apply_translation([0, 0.88, 1.1])
+    canopy_box.visual.face_colors = c_glass
+    scene.add_geometry(canopy_box, node_name="canopy_glass")
+    
+    canopy_frame = trimesh.creation.box([1.24, 0.08, 0.12])
+    canopy_frame.apply_translation([0, 1.15, 0.4])
+    canopy_frame.visual.face_colors = c_hull_metal
+    scene.add_geometry(canopy_frame, node_name="canopy_frame_mid")
+    
+    # 3. ASTROMECH DROID KUBBESİ
+    droid_socket = trimesh.creation.cylinder(radius=0.42, height=0.2)
+    droid_socket.apply_translation([0, 0.85, -0.6])
+    droid_socket.visual.face_colors = c_hull_metal
+    scene.add_geometry(droid_socket, node_name="droid_socket")
+    
+    droid_head = trimesh.creation.icosphere(subdivisions=2, radius=0.35)
+    droid_head.apply_translation([0, 1.05, -0.6])
+    droid_head.visual.face_colors = c_droid_silver
+    scene.add_geometry(droid_head, node_name="droid_head")
+    
+    droid_eye = trimesh.creation.cylinder(radius=0.09, height=0.12)
+    droid_eye.apply_translation([0, 1.15, -0.32])
+    droid_eye.visual.face_colors = [255, 30, 30, 255]
+    scene.add_geometry(droid_eye, node_name="droid_sensor_eye")
+    
+    # 4. S-FOIL SALDIRI KANATLARI (X-WING)
+    wing_configs = [
+        ("top_left",     -1,  1,  np.radians(11.0)),
+        ("bottom_left",  -1, -1, -np.radians(11.0)),
+        ("top_right",     1,  1,  np.radians(11.0)),
+        ("bottom_right",  1, -1, -np.radians(11.0)),
+    ]
+    
+    for name, side_x, side_y, angle_z in wing_configs:
+        wing_plate = trimesh.creation.box([5.0, 0.14, 2.4])
+        wv = wing_plate.vertices.copy()
+        for idx in range(len(wv)):
+            span_ratio = (wv[idx, 0] + 2.5) / 5.0
+            if span_ratio > 0.5:
+                wv[idx, 2] -= (span_ratio - 0.5) * 0.9
+                wv[idx, 1] *= 0.85
+        wing_plate.vertices = wv
+        wing_plate.apply_translation([2.5 + 0.8, 0, -1.8])
+        wing_plate.visual.face_colors = c_hull_dark
+        
+        wing_stripe = trimesh.creation.box([4.2, 0.16, 0.35])
+        wing_stripe.apply_translation([2.5 + 0.9, 0, -1.2])
+        wing_stripe.visual.face_colors = c_orange
+        
+        wing_mesh = trimesh.util.concatenate([wing_plate, wing_stripe])
+        
+        if side_x < 0:
+            reflect_x = trimesh.transformations.reflection_matrix([0, 0, 0], [1, 0, 0])
+            wing_mesh.apply_transform(reflect_x)
+            
+        rot_z = trimesh.transformations.rotation_matrix(angle_z if side_x > 0 else -angle_z, [0, 0, 1])
+        wing_mesh.apply_transform(rot_z)
+        wing_mesh.apply_translation([0, side_y * 0.35, 0])
+        scene.add_geometry(wing_mesh, node_name=f"sfoil_wing_{name}")
+        
+    # 5. 4 ADET TÜRBİN MOTORU
+    engine_coords = [
+        ("tl", -1.45,  0.85),
+        ("bl", -1.45, -0.85),
+        ("tr",  1.45,  0.85),
+        ("br",  1.45, -0.85),
+    ]
+    
+    for idx, (ename, ex, ey) in enumerate(engine_coords):
+        eng_cyl = trimesh.creation.cylinder(radius=0.55, height=3.4)
+        eng_cyl.apply_translation([ex, ey, -2.6])
+        eng_cyl.visual.face_colors = c_hull_dark
+        scene.add_geometry(eng_cyl, node_name=f"engine_cyl_{ename}")
+        
+        eng_ring = trimesh.creation.cylinder(radius=0.62, height=0.4)
+        eng_ring.apply_translation([ex, ey, -0.9])
+        eng_ring.visual.face_colors = c_orange
+        scene.add_geometry(eng_ring, node_name=f"engine_intake_{ename}")
+        
+        fan_cone = trimesh.creation.cone(radius=0.35, height=0.5)
+        fan_cone.apply_translation([ex, ey, -0.85])
+        fan_cone.visual.face_colors = c_hull_metal
+        scene.add_geometry(fan_cone, node_name=f"engine_fan_{ename}")
+        
+        nozzle = trimesh.creation.cylinder(radius=0.50, height=0.7)
+        nozzle.apply_translation([ex, ey, -4.5])
+        nozzle.visual.face_colors = c_hull_metal
+        scene.add_geometry(nozzle, node_name=f"engine_nozzle_{ename}")
+        
+        glow_core = trimesh.creation.cylinder(radius=0.38, height=0.3)
+        glow_core.apply_translation([ex, ey, -4.75])
+        glow_core.visual.face_colors = c_engine_glow
+        scene.add_geometry(glow_core, node_name=f"engine_glow_{idx}")
+        
+    # 6. 4 ADET KANAT UCU LAZER TOPU
+    cannon_coords = [
+        (0, -6.1,  1.8),
+        (1, -6.1, -1.8),
+        (2,  6.1,  1.8),
+        (3,  6.1, -1.8),
+    ]
+    
+    for c_id, cx, cy in cannon_coords:
+        c_body = trimesh.creation.cylinder(radius=0.22, height=2.2)
+        c_body.apply_translation([cx, cy, -2.7])
+        c_body.visual.face_colors = c_hull_dark
+        scene.add_geometry(c_body, node_name=f"laser_body_{c_id}")
+        
+        c_ring = trimesh.creation.cylinder(radius=0.26, height=0.35)
+        c_ring.apply_translation([cx, cy, -1.7])
+        c_ring.visual.face_colors = c_orange
+        scene.add_geometry(c_ring, node_name=f"laser_ring_{c_id}")
+        
+        barrel = trimesh.creation.cylinder(radius=0.08, height=6.4)
+        barrel.apply_translation([cx, cy, 1.6])
+        barrel.visual.face_colors = c_hull_metal
+        scene.add_geometry(barrel, node_name=f"laser_barrel_{c_id}")
+        
+        muzzle = trimesh.creation.cylinder(radius=0.14, height=0.45)
+        muzzle.apply_translation([cx, cy, 4.95])
+        muzzle.visual.face_colors = [255, 60, 20, 255]
+        scene.add_geometry(muzzle, node_name=f"laser_cannon_{c_id}")
+
+    out_path = os.path.join(MODELS_DIR, "dark_x_wing.glb")
+    glb_data = scene.export(file_type="glb")
+    with open(out_path, "wb") as f:
+        f.write(glb_data)
+    print(f"✓ dark_x_wing.glb oluşturuldu ({len(glb_data)} bayt)")
+
+
 if __name__ == "__main__":
     print("=" * 70)
     print("DEATH STAR v2: 3D GLB VARLIK ÜRETİCİ BAŞLATILIYOR...")
     print("=" * 70)
     create_trench_module()
     create_tie_fighter()
+    create_dark_x_wing()
     create_exhaust_port()
     create_death_star()
     print("=" * 70)

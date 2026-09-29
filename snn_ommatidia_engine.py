@@ -68,9 +68,10 @@ class OmmatidiaEyeArray:
         self.vectors = self.vectors / norms
         self.excitation = np.zeros(len(self.vectors), dtype=np.float32)
 
-    def process_visual_stimuli(self, lasers, exhaust_target):
+    def process_visual_stimuli(self, lasers, exhaust_target=None, frontal_obstacles=None):
         """
-        Lazerler ve Egzoz Çukurundan gelen foton akısını ommatidia reseptörlerinde hesaplar.
+        Lazerler, Egzoz Çukuru ve Öndeki Fiziksel Engellerden (Sollayan X-Wing'ler) gelen foton akısını
+        ve optik büyüme (Optical Looming) vektörlerini 750 ommatidia reseptöründe hesaplar.
         """
         self.excitation.fill(0.0)
         left_threat = 0.0
@@ -88,9 +89,10 @@ class OmmatidiaEyeArray:
         for laser in lasers:
             lx, ly, lz = laser['x'], laser['y'], laser['z']
             
-            # SADECE ÖNDEN YAKLAŞAN LAZERLER TEHDİTTİR (lz > 1.0)
-            # Arkaya geçmiş lazerler (lz <= 1.0) gemiden uzaklaşmaktadır, tehdit oluşturmaz!
-            if lz <= 1.0:
+            # Arkadan (-z'den +z'ye) veya önden yaklaşan lazerlerin yaklaşma kontrolü:
+            # client 'approaching' bilgisini gönderirse doğrudan kullanır, yoksa mesafeye bakar
+            is_approaching = laser.get('approaching', True)
+            if not is_approaching:
                 continue
 
             dist = math.sqrt(lx*lx + ly*ly + lz*lz)
@@ -108,8 +110,8 @@ class OmmatidiaEyeArray:
                 closest_laser_looming = looming
                 closest_laser_x = lx
             
-            # Doğrudan gövdeye çarpma rotasındaki kritik acil tehdit:
-            if lz < 45.0 and lateral_dist < 4.2:
+            # Doğrudan gövdeye çarpma rotasındaki kritik acil tehdit (Arkadan veya önden):
+            if dist < 42.0 and lateral_dist < 4.2:
                 critical_threat = True
 
             # Lazer yön vektörü
@@ -126,6 +128,61 @@ class OmmatidiaEyeArray:
                     left_threat += looming
                 else:
                     right_threat += looming
+
+        # 1b. TIE Fighter'ı Sollayan X-Wing'ler (Ön Fiziksel Looming Tehdidi / Yol Kesme)
+        closest_obstacle_dist = 999.0
+        closest_obstacle_looming = 0.0
+        closest_obstacle_x = 0.0
+        
+        if frontal_obstacles:
+            for obs in frontal_obstacles:
+                ox = obs['x']
+                oy = obs['y']
+                oz = obs['z']  # oz > 0: TIE'nin önünde (+z yönünde)
+                if oz <= 0.2 or oz > 75.0:
+                    continue
+                    
+                dist = math.sqrt(ox*ox + oy*oy + oz*oz)
+                if dist < 0.1:
+                    dist = 0.1
+                lateral_dist = math.hypot(ox, oy)
+                
+                # TIE Fighter ile öndeki X-Wing arasındaki yaklaşma hızı (closing speed):
+                # TIE ~35 m/s, önündeki X-Wing ~32 m/s -> TIE hızla arkadan yetişiyor
+                rel_vz = obs.get('vz', 0.0)  # tie_vz - obs_vz
+                closing_speed = max(8.0, rel_vz + 12.0)
+                approach_rate = closing_speed / max(1.0, dist)
+                
+                # Büyüyen optik gövde uyarımı (Optical Looming Stimulus):
+                # X-Wing devasa bir fiziksel gövdedir (12m kanat açıklığı),
+                # yaklaştıkça petek göz üzerinde katlanarak genişleyen bir silüet oluşturur!
+                looming = approach_rate * (60.0 / max(3.5, dist))
+                
+                if dist < closest_obstacle_dist:
+                    closest_obstacle_dist = dist
+                    closest_obstacle_looming = looming
+                    closest_obstacle_x = ox
+                
+                # Doğrudan çarpışma rotasındaki kritik acil engel:
+                if dist < 38.0 and lateral_dist < 6.5:
+                    critical_threat = True
+                    
+                # 750 Ommatidia bileşik göz üzerinde nesnenin izdüşümü:
+                norm_o = np.array([ox/dist, oy/dist, oz/dist], dtype=np.float32)
+                dots = np.dot(self.vectors, norm_o)
+                
+                # Cisim yaklaştıkça petek göz üzerindeki açısal çapı (koni) genişler:
+                cone_threshold = max(0.55, 1.0 - (5.5 / max(3.0, dist)))
+                active_mask = dots > cone_threshold
+                stim = np.clip(looming * 0.08, 0.0, 1.0)
+                self.excitation[active_mask] += stim
+                
+                # Sol/Sağ lateral tehdit ayrımı (TIE'nin engelden kaçması için):
+                if lateral_dist < 18.0:
+                    if ox < 0:
+                        left_threat += looming * 1.5
+                    else:
+                        right_threat += looming * 1.5
 
         # 2. Thermal Exhaust Port (LC10a Hedef Kitleme & Besin/Feromon Çekimi)
         target_dist = 999.0
@@ -148,13 +205,20 @@ class OmmatidiaEyeArray:
                 target_azimuth_error = math.atan2(tx, tz)  # Radyan cinsinden yatay hata
                 target_elevation_error = math.atan2(ty, tz) # Dikey hata
 
+        # En yakın tehdit değerlendirmesi (Lazer veya Ön Engel)
+        effective_dist = min(closest_laser_dist, closest_obstacle_dist)
+        effective_looming = max(closest_laser_looming, closest_obstacle_looming)
+        effective_x = closest_obstacle_x if closest_obstacle_dist < closest_laser_dist else closest_laser_x
+
         return {
             "left_threat": float(left_threat),
             "right_threat": float(right_threat),
-            "closest_laser_dist": float(closest_laser_dist),
-            "closest_laser_x": float(closest_laser_x),
-            "closest_looming": float(closest_laser_looming),
+            "closest_laser_dist": float(effective_dist),
+            "closest_laser_x": float(effective_x),
+            "closest_looming": float(effective_looming),
             "critical_threat": critical_threat,
+            "closest_obstacle_dist": float(closest_obstacle_dist),
+            "closest_obstacle_looming": float(closest_obstacle_looming),
             "target_detected": target_detected,
             "target_dist": float(target_dist),
             "target_rel_z": float(target_rel_z),
@@ -184,6 +248,7 @@ class DrosophilaSNNBrain:
         self.v_proboscis = -70.0 # Proboscis Extension Reflex (PER - Beslenme/Hortum motor nöronu)
         self.proboscis_fired = False
         self.last_proboscis_time = 0.0
+        self.last_tie_laser_time = 0.0
         
         # 200 Hz Kanat Dinamikleri
         self.wing_freq = 200.0  # Hz
@@ -483,6 +548,24 @@ class DrosophilaSNNBrain:
             self.v_lc10a += (-70.0 - self.v_lc10a) * dt * 5.0
             self.v_proboscis += (-70.0 - self.v_proboscis) * dt * 4.0
 
+        # 2b. Biyolojik Karşı Saldırı & Düşman Avlama Refleksi (TIE Forward Lasers):
+        # Sineğin önünde bir X-Wing belirdiğinde (özellikle sollayıp önüne geçen veya ön koridorda uçan düşmanlar):
+        # Sineğin hortum (PER) ve bacak refleksleri tetiklenerek ileriye lazer ateşler!
+        tie_fire_laser = False
+        closest_obs_dist = visual_data.get("closest_obstacle_dist", 999.0)
+        closest_obs_x = visual_data.get("closest_laser_x", 0.0)
+        
+        # Ön koridorda (dist < 85m ve |x| < 6.5m) düşman varsa:
+        if closest_obs_dist < 85.0 and abs(closest_obs_x) < 6.5:
+            if (t_now - self.last_tie_laser_time) > 1.2:
+                self.v_proboscis += 50.0
+                if self.v_proboscis > -48.0:
+                    spikes.append("PROBOSCIS_PER")
+                    tie_fire_laser = True
+                    self.last_tie_laser_time = t_now
+                    self.v_proboscis = -70.0
+                    print(f"[COUNTER-ATTACK] ⚡ SİNEK KARŞI SALDIRI REFLEKSİ! Öndeki X-Wing'e İkiz Lazer Ateşlendi (Mesafe: {closest_obs_dist:.1f}m)!")
+
         # 3. Giant Fiber (DNp01) Looming Kaçış Refleksi
         closest_looming = visual_data["closest_looming"]
         laser_dist = visual_data["closest_laser_dist"]
@@ -584,6 +667,7 @@ class DrosophilaSNNBrain:
             "barrel_roll_delta": float(roll_angle_delta),
             "dopamine_mv": float(self.dopamine_level),
             "proboscis_trigger": bool(proboscis_trigger),
+            "tie_fire_laser": bool(tie_fire_laser),
             "spikes": spikes,
             "neuron_potentials": {
                 "v_lc10a": float(self.v_lc10a),
@@ -614,3 +698,409 @@ class DrosophilaSNNBrain:
                 "proboscis_ready": bool(not self.proboscis_fired)
             }
         }
+
+
+class XWingDrosophilaBrain:
+    """
+    X-Wing Düşman Birimi Biyolojik Sinek Beyni (Drosophila Melanogaster Multi-Agent SNN).
+    - Her bir Dark X-Wing'in arka planda çalışan kendi simüle edilmiş Drosophila beynidir.
+    - Uçuş Fiziği: TIE Fighter ile aynı (200 Hz kanat çırpma, basalar motor nöronları b1_L / b1_R,
+      asimetrik kanat vuruş genliği ΔΦ, Roll/Pitch/Yaw torkları).
+    - LC10a Görsel Devresi: Öndeki TIE Fighter'ı av/feromon hedefi olarak algılayıp rotasını sürekli ona kilitler.
+    - Proboscis Extension Reflex (PER): TIE menzile girip açı sıfırlandığında lazer salvosunu ateşler (-z'den +z'ye).
+    - 1 HP Kuralı (Glass Cannon): Tek vuruşluk can; siper duvarına çarparsa veya kaçış şokuna kapılırsa imha olur.
+    """
+    def __init__(self, agent_id, spawn_x=0.0, spawn_y=32.0, spawn_z=-50.0):
+        self.agent_id = str(agent_id)
+        self.hp = 1
+        self.is_alive = True
+        self.destroyed_reason = None
+        
+        # 750 Ommatidia Bileşik Göz Geometrisi
+        self.eye = OmmatidiaEyeArray(num_ommatidia=750)
+        
+        # 6-DoF Kinematik Durum
+        self.x = float(spawn_x)
+        self.y = float(spawn_y)
+        self.z = float(spawn_z)
+        self.vx = 0.0
+        self.vy = 0.0
+        self.vz = 39.0  # Dengeli takip başlangıç hızı
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.yaw = 0.0
+        
+        # Nöron Potansiyelleri (Leaky Integrate-and-Fire, LIF mV)
+        self.v_lc10a = -70.0      # TIE Fighter av/feromon takip nöronu
+        self.v_dnp01 = -70.0      # Giant Fiber
+        self.v_b1_l = -70.0       # Sol kanat basalar motor nöronu
+        self.v_b1_r = -70.0       # Sağ kanat basalar motor nöronu
+        self.v_proboscis = -70.0  # PER Lazer Tetikleyici Nöron
+        
+        # 200 Hz Kanat Mekaniği
+        self.wing_freq = 200.0
+        self.wing_phase = float(np.random.uniform(0.0, 2.0 * math.pi))
+        self.phi_l = 150.0
+        self.phi_r = 150.0
+        self.delta_phi = 0.0
+        self.current_flap_l = 0.0
+        self.current_flap_r = 0.0
+        
+        # PER Ateşleme Zamanlaması
+        self.last_fire_time = 0.0
+        self.fire_cooldown = float(np.random.uniform(1.2, 1.9))
+        self.aim_lock_ratio = 0.0
+        self.is_locked = False
+        
+        # Biyolojik Çeşitlilik ve Av Takip Helezon Parametreleri (Predatory Weave Dynamics)
+        self.flight_time = float(np.random.uniform(0.0, 10.0))
+        self.weave_phase = float(np.random.uniform(0.0, 2.0 * math.pi))
+        self.weave_freq_x = float(np.random.uniform(0.85, 1.45))
+        self.weave_freq_y = float(np.random.uniform(0.65, 1.15))
+        self.weave_amp_x = float(np.random.uniform(7.0, 13.0))   # Yatay kanat manevra yarıçapı
+        self.weave_amp_y = float(np.random.uniform(3.5, 7.5))    # Dikey irtifa dalgalanması
+        self.attack_pulse_phase = float(np.random.uniform(0.0, 2.0 * math.pi))
+        
+        self.aggression = float(np.random.uniform(1.15, 1.45))
+        self.steering_gain = float(np.random.uniform(2.8, 3.8))
+
+        # Taktik Durum Makinesi (Asimetrik Av-Avcı Dogfight & Sollama):
+        # 'chase': Arkadan takip & PER lazer taciz ateşi
+        # 'boost_overtake': İtki patlaması (+32 m/s delta) ile TIE Fighter'ı sollama
+        # 'lane_block': TIE'nin tam önüne geçip yolunu kesme & Looming tehdit engeli
+        # 'breakaway': Kenara açılarak TIE'nin tekrar öne geçmesine izin verme
+        self.tactic_state = 'chase'
+        self.tactic_timer = float(np.random.uniform(0.5, 3.5))
+        self.overtake_flank_x = 0.0
+        self.block_target_x = 0.0
+        self.block_duration = float(np.random.uniform(2.5, 4.2))
+
+    def step(self, dt, tie_state, is_tie_barrel_rolling=False):
+        """
+        60 Hz X-Wing SNN simülasyon adımı.
+        TIE Fighter'ı av olarak arkadan takip eder, ani itki (boost) ile TIE'yi sollayıp
+        tam önüne geçer (+z ekseni), yolunu keserek ommatidia petek gözde büyüyen bir engel (looming threat)
+        oluşturur ve TIE'yi manevra yapmaya zorlar.
+        """
+        if not self.is_alive:
+            return None
+            
+        spikes = []
+        t_now = time.time()
+        self.flight_time += dt
+        
+        tie_x = float(tie_state["x"])
+        tie_y = float(tie_state["y"])
+        tie_z = float(tie_state["z"])
+        tie_vz = float(tie_state.get("vz", 35.0))
+        
+        dx = tie_x - self.x
+        dy = tie_y - self.y
+        dz = tie_z - self.z  # dz > 0: TIE önde, dz < 0: X-Wing önde (+z)!
+        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if dist < 0.1:
+            dist = 0.1
+
+        self.tactic_timer += dt
+        
+        # 1. Taktik Durum Makinesi Geçişleri:
+        if self.tactic_state == 'chase':
+            # 5.0s - 7.0s takip ettikten sonra ve TIE'nin 10m - 42m arkasındayken sollama itkisini ateşle
+            if self.tactic_timer > 5.0 and (10.0 < dz < 42.0):
+                self.tactic_state = 'boost_overtake'
+                self.tactic_timer = 0.0
+                # TIE'nin solundan veya sağından geçiş kanadı belirle
+                self.overtake_flank_x = float(tie_x - 13.0 if tie_x > 0 else tie_x + 13.0)
+                self.overtake_flank_x = max(-26.0, min(26.0, self.overtake_flank_x))
+                print(f"[DOGFIGHT] 🚀 {self.agent_id} İTKİ PATLAMASI! TIE Fighter'ı sollamaya başladı! (Hız delta: +14 m/s, Flank X: {self.overtake_flank_x:.1f})")
+
+        elif self.tactic_state == 'boost_overtake':
+            # TIE Fighter'ın önüne geçtiğinde (dz <= -12m) hemen önüne kırarak yolunu kes!
+            if dz <= -12.0 or self.tactic_timer > 4.5:
+                self.tactic_state = 'lane_block'
+                self.tactic_timer = 0.0
+                self.block_duration = float(np.random.uniform(2.5, 4.0))
+                self.block_target_x = tie_x
+                print(f"[DOGFIGHT] 🛑 {self.agent_id} TIE Fighter'ı SOLLAYIP ÖNÜNE GEÇTİ! Yol kesme ve Looming Tehdit başladı (Önde {(-dz):.1f}m)")
+
+        elif self.tactic_state == 'lane_block':
+            # TIE'nin önünde 2.5 - 4.0 saniye kalarak looming tehdit oluşturur
+            # Süre dolunca veya TIE çok uzaklaşınca / fıçı tonosuyla savrulunca kenara açıl
+            if self.tactic_timer > self.block_duration or dz < -42.0 or dz > 2.0:
+                self.tactic_state = 'breakaway'
+                self.tactic_timer = 0.0
+                self.overtake_flank_x = float(22.0 if self.x > 0 else -22.0)
+
+        elif self.tactic_state == 'breakaway':
+            # Kenara açılıp hız keserek TIE'nin tekrar öne geçmesine izin verir
+            if dz > 16.0 or self.tactic_timer > 3.2:
+                self.tactic_state = 'chase'
+                self.tactic_timer = 0.0
+
+        # 2. Uçuş Hedefi ve Z-Ekseni Hız Farkı (Velocity Delta):
+        if self.tactic_state == 'chase':
+            weave_x = math.sin(self.flight_time * self.weave_freq_x + self.weave_phase) * self.weave_amp_x
+            weave_y = math.cos(self.flight_time * self.weave_freq_y + self.weave_phase) * self.weave_amp_y
+            aim_x = tie_x + weave_x
+            aim_y = tie_y + weave_y
+            desired_dz = 20.0 + (math.sin(self.flight_time * 0.75 + self.attack_pulse_phase) + 1.0) * 6.0
+            
+            if dz > desired_dz + 8.0:
+                target_speed = tie_vz + 10.0  # İnsaflı yaklaşma
+            elif dz > desired_dz:
+                target_speed = tie_vz + 4.0   # Takip
+            else:
+                target_speed = tie_vz - 3.0   # Mesafe koruma
+                
+        elif self.tactic_state == 'boost_overtake':
+            # Yan kanattan sıyrılıp TIE'yi insaflı hız farkıyla solla (+14 m/s delta)
+            aim_x = self.overtake_flank_x
+            aim_y = tie_y + 1.2
+            # Sineğin Giant Fiber kaçış refleksleriyle savuşturabileceği dengeli hız delta
+            target_speed = tie_vz + 14.0
+            
+        elif self.tactic_state == 'lane_block':
+            # TIE Fighter'ın doğrudan uçuş koridoruna yerleş
+            sway_x = math.sin(self.flight_time * 1.8) * 3.0
+            aim_x = self.block_target_x + sway_x
+            aim_y = tie_y + math.cos(self.flight_time * 1.2) * 1.5
+            # TIE ile neredeyse denk hız (-0.5 m/s delta), ani tuğla freni yapmaz
+            target_speed = tie_vz - 0.5
+            
+        elif self.tactic_state == 'breakaway':
+            # Siper duvarına doğru açıl ve hız keserek TIE'nin öne geçmesini sağla
+            aim_x = self.overtake_flank_x
+            aim_y = 48.0
+            target_speed = tie_vz - 16.0
+
+        # Z-Ekseni Hız Entegrasyonu
+        accel_rate = 4.8 if self.tactic_state == 'boost_overtake' else 2.6
+        self.vz += (target_speed - self.vz) * dt * accel_rate
+        self.z += self.vz * dt
+        
+        # 3. Yönelim ve 6-DoF Hedef Hataları
+        aim_dx = aim_x - self.x
+        aim_dy = aim_y - self.y
+        target_azimuth_error = math.atan2(aim_dx, 12.0)
+        target_elevation_error = math.atan2(aim_dy, 12.0)
+        
+        # Ommatidia Bileşik Göz & LC10a Devresi
+        self.eye.excitation.fill(0.0)
+        norm_t = np.array([dx / dist, dy / dist, max(1.0, dz) / dist], dtype=np.float32)
+        dots = np.dot(self.eye.vectors, norm_t)
+        in_view_mask = dots > 0.65
+        self.eye.excitation[in_view_mask] += 1.0
+        
+        # LC10a Hedef Kitleme Nöronu Depolarizasyonu
+        alignment_error = math.hypot(target_azimuth_error, target_elevation_error)
+        self.aim_lock_ratio = max(0.0, min(1.0, 1.0 - (alignment_error / 0.45)))
+        
+        stim_lc10a = (math.fabs(target_azimuth_error) * 45.0 + 22.0) * self.aggression
+        self.v_lc10a += stim_lc10a * dt
+        if self.v_lc10a > -50.0:
+            spikes.append("LC10a")
+            self.v_lc10a = -70.0
+            
+        # 4. Yönlendirme (Steering Intent) ve Siper Duvarı Algısı
+        steering_intent = target_azimuth_error * self.steering_gain
+        
+        # Siper duvarı optik akış kaçınması:
+        if self.x > 26.0:
+            steering_intent -= (self.x - 26.0) * 0.60
+        elif self.x < -26.0:
+            steering_intent += (-26.0 - self.x) * 0.60
+            
+        # Tavan ve Zemin optik kaçınması:
+        pitch_intent = target_elevation_error * 2.4
+        if self.y > 66.0:
+            pitch_intent -= (self.y - 66.0) * 0.45
+        elif self.y < 12.0:
+            pitch_intent += (12.0 - self.y) * 0.45
+            
+        # Asimetrik Kanat Strok Genliği (ΔΦ = ΦL - ΦR)
+        self.v_b1_l = -70.0 + max(0.0, steering_intent * 32.0)
+        self.v_b1_r = -70.0 + max(0.0, -steering_intent * 32.0)
+        
+        self.delta_phi = float(np.clip(steering_intent * 28.0, -36.0, 36.0))
+        self.phi_l = 150.0 + self.delta_phi / 2.0
+        self.phi_r = 150.0 - self.delta_phi / 2.0
+        
+        # 200 Hz Kanat Çırpma Kinematiği
+        self.wing_phase = (self.wing_phase + 2.0 * math.pi * self.wing_freq * dt) % (2.0 * math.pi)
+        self.current_flap_l = math.sin(self.wing_phase) * math.radians(self.phi_l / 2.0)
+        self.current_flap_r = math.sin(self.wing_phase) * math.radians(self.phi_r / 2.0)
+        
+        # 5. Uçuş Fiziği Torkları (Pitch/Yaw/Roll Manevraları)
+        yaw_torque = self.delta_phi * 0.15
+        roll_torque = self.delta_phi * 0.24
+        pitch_torque = float(np.clip(pitch_intent, -2.0, 2.0))
+        
+        # Rotasyon Entegrasyonu
+        self.roll += roll_torque * dt
+        self.roll *= math.exp(-dt * 3.2)
+        self.yaw += yaw_torque * dt
+        self.yaw *= math.exp(-dt * 2.2)
+        self.pitch += pitch_torque * dt
+        self.pitch *= math.exp(-dt * 3.2)
+        
+        # Konum Güncelleme
+        self.vx = self.roll * 20.0 + self.yaw * 14.0
+        self.x += self.vx * dt
+        
+        self.vy = self.pitch * 16.0
+        self.y += self.vy * dt
+        
+        # 6. Proboscis Extension Reflex (PER) Lazer Ateşleme
+        # KURAL: X-Wing SADECE TIE Fighter'ın arkasındayken (dz > 6.0) ve menzildeyken ateş açar!
+        # TIE Fighter'ın önüne geçtiğinde (lane_block veya dz <= 0) TIE'ye doğru ateş açamaz (namlular +Z ileri yönlüdür).
+        fire_laser = False
+        if dz > 6.0 and self.tactic_state != 'lane_block':
+            tie_dx = tie_x - self.x
+            tie_dy = tie_y - self.y
+            tie_azimuth_err = math.atan2(tie_dx, max(1.0, dz))
+            tie_elev_err = math.atan2(tie_dy, max(1.0, dz))
+            direct_alignment = math.hypot(tie_azimuth_err, tie_elev_err)
+            
+            in_range = (8.0 < dz < 55.0) and (dist < 60.0)
+            self.is_locked = in_range and (direct_alignment < 0.28)
+            
+            if self.is_locked and (t_now - self.last_fire_time > self.fire_cooldown):
+                self.v_proboscis += 45.0
+                if self.v_proboscis > -48.0:
+                    spikes.append("PROBOSCIS_PER")
+                    fire_laser = True
+                    self.last_fire_time = t_now
+                    self.v_proboscis = -70.0
+                    self.fire_cooldown = float(np.random.uniform(2.4, 3.8))
+            else:
+                self.v_proboscis += (-70.0 - self.v_proboscis) * dt * 4.0
+        else:
+            self.is_locked = False
+            self.v_proboscis += (-70.0 - self.v_proboscis) * dt * 4.0
+            
+        # 7. 1 HP Kuralı & Çarpışma / Savrulma Kontrolü (Glass Cannon)
+        # Siper Duvar Sınırları: |X| >= 34.0, Y <= 5.0, Y >= 78.0
+        if abs(self.x) >= 34.0:
+            self.is_alive = False
+            self.destroyed_reason = "wall_crash"
+        elif self.y <= 5.0:
+            self.is_alive = False
+            self.destroyed_reason = "floor_crash"
+        elif self.y >= 78.0:
+            self.is_alive = False
+            self.destroyed_reason = "ceiling_crash"
+            
+        # TIE Fighter Giant Fiber Fıçı Tonosu Girdap Şoku:
+        # TIE fıçı tonosu yaparsa ve X-Wing arkasındaysa (dist < 26m, dz < 34m):
+        # 1 HP X-Wing şiddetli hava girdabıyla anında savrulur ve parçalanır!
+        if is_tie_barrel_rolling and (dz > -6.0 and dz < 34.0) and (dist < 26.0):
+            self.is_alive = False
+            self.destroyed_reason = "barrel_roll_wake"
+            
+        return {
+            "id": self.agent_id,
+            "x": float(self.x),
+            "y": float(self.y),
+            "z": float(self.z),
+            "roll": float(self.roll),
+            "pitch": float(self.pitch),
+            "yaw": float(self.yaw),
+            "speed": float(self.vz),
+            "hp": int(self.hp if self.is_alive else 0),
+            "is_alive": bool(self.is_alive),
+            "destroyed_reason": self.destroyed_reason,
+            "wing_l": float(self.current_flap_l),
+            "wing_r": float(self.current_flap_r),
+            "delta_phi": float(self.delta_phi),
+            "fire_laser": bool(fire_laser),
+            "tactic_state": str(self.tactic_state),
+            "is_in_front": bool(dz < 0),
+            "dz": float(round(dz, 1)),
+            "neural": {
+                "v_lc10a": float(self.v_lc10a),
+                "v_proboscis": float(self.v_proboscis),
+                "lock_ratio": float(round(self.aim_lock_ratio, 2)),
+                "spikes": spikes
+            }
+        }
+
+
+class EnemySquadronManager:
+    """
+    Çoklu Düşman X-Wing Filosu Yöneticisi (Multi-Agent Simulation Manager).
+    - Maksimum 2 X-Wing sınırıyla adil dalga (wave) simülasyonu yürütür.
+    - Sahnede yok edilen birimlerin ardından TIE Fighter'a reaksiyon payı (4.5s cooldown) tanır.
+    """
+    def __init__(self, max_enemies=2):
+        self.enemies = {}  # {agent_id: XWingDrosophilaBrain}
+        self.max_enemies = max_enemies
+        self.next_agent_num = 1
+        self.spawn_timer = 0.0
+
+    def reset(self):
+        self.enemies.clear()
+        self.next_agent_num = 1
+        self.spawn_timer = 0.0
+
+    def spawn_enemy(self, tie_state):
+        agent_id = f"xwing_{self.next_agent_num}"
+        self.next_agent_num += 1
+        
+        # TIE Fighter'ın gerisinde reaksiyon payı tanıyacak mesafede spawn:
+        # Z: TIE Fighter'ın 42 - 62 metre gerisi (Geniş 3. şahıs kamerada yaklaşırken net görünür)
+        # Yan kanatlardan (X: +/- 10m - 20m) siper içine dalarak spawn olur
+        side = 1.0 if (self.next_agent_num % 2 == 0) else -1.0
+        spawn_x = float(tie_state["x"] + side * np.random.uniform(10.0, 20.0))
+        spawn_x = max(-26.0, min(26.0, spawn_x))
+        spawn_y = float(tie_state["y"] + np.random.uniform(-2.0, 6.0))
+        spawn_y = max(14.0, min(60.0, spawn_y))
+        spawn_z = float(tie_state["z"] - np.random.uniform(42.0, 62.0))
+        
+        brain = XWingDrosophilaBrain(agent_id, spawn_x, spawn_y, spawn_z)
+        brain.vz = float(tie_state.get("vz", 35.0) + 4.0)
+        self.enemies[agent_id] = brain
+        return brain
+
+    def on_enemy_hit_or_crashed(self, agent_id, reason="client_confirmed"):
+        if agent_id in self.enemies:
+            self.enemies[agent_id].is_alive = False
+            self.enemies[agent_id].destroyed_reason = reason
+
+    def step(self, dt, tie_state, is_tie_barrel_rolling=False, is_finale=False):
+        # Final aşamasında (Ölüm Yıldızı reaktör çukuru) yeni düşman spawn edilmez
+        if not is_finale:
+            self.spawn_timer += dt
+            alive_count = sum(1 for e in self.enemies.values() if e.is_alive)
+            
+            # Adil Dalga Sistemi (Balanced Wave Cooldown):
+            # Eğer sahnede hiç düşman kalmadıysa 4.5 saniye nefes alma süresi tanı!
+            # Eğer 1 düşman varsa ikincisi için 7.0 saniye bekle.
+            spawn_delay = 4.5 if alive_count == 0 else 7.0
+            if self.spawn_timer >= spawn_delay and alive_count < self.max_enemies:
+                self.spawn_enemy(tie_state)
+                self.spawn_timer = 0.0
+                
+        # Tüm X-Wing'lerin SNN ve Uçuş Adımlarını İlerlet
+        results = []
+        dead_ids = []
+        
+        for agent_id, enemy in list(self.enemies.items()):
+            # Çok geride kalanları (> 95m) veya sollama sonrası çok öne kaçanları (< -70m) temizle
+            dz = tie_state["z"] - enemy.z
+            if dz > 95.0 or dz < -70.0:
+                dead_ids.append(agent_id)
+                continue
+                
+            res = enemy.step(dt, tie_state, is_tie_barrel_rolling)
+            if res:
+                results.append(res)
+                if not enemy.is_alive:
+                    dead_ids.append(agent_id)
+                    
+        # Ölü veya menzil dışına çıkmış birimleri temizle
+        for did in dead_ids:
+            if did in self.enemies:
+                del self.enemies[did]
+                
+        return results
+
