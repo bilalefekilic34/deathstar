@@ -42,38 +42,40 @@ export class BiologicalTieFighter {
                             const name = child.name.toLowerCase();
                             // Kokpit camını ultra berrak ve şeffaf yap (İçteki sinek net görünsün)
                             if (name.includes('glass') || name.includes('canopy')) {
-                                child.material = new THREE.MeshPhysicalMaterial({
+                                child.material = new THREE.MeshStandardMaterial({
                                     color: 0x93c5fd,
-                                    transmission: 0.95,
-                                    opacity: 0.35,
+                                    opacity: 0.22,
                                     transparent: true,
                                     roughness: 0.08,
-                                    metalness: 0.1,
-                                    ior: 1.45,
-                                    reflectivity: 0.7,
+                                    metalness: 0.15,
                                     depthWrite: false
                                 });
-                            } else if (name.includes('wing') && !name.includes('pylon')) {
-                                // Güneş paneli kanatları: Sleek slate paneller & metalik yansıma
+                            } else if ((name === 'left_wing' || name === 'right_wing') && !name.includes('strut') && !name.includes('rim') && !name.includes('hub')) {
+                                // Güneş paneli kanatları: Koyu karbon / fotovoltaik solar panelleri
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x283548,
-                                    roughness: 0.45,
-                                    metalness: 0.55
+                                    color: 0x14181f,
+                                    roughness: 0.58,
+                                    metalness: 0.28,
+                                    side: THREE.DoubleSide
                                 });
-                            } else if (name.includes('engine')) {
-                                // İkiz İyon Motorları: Yumuşak pastel kırmızı egzoz ışıması
+                            } else if (name.includes('engine') && !name.includes('block') && !name.includes('nozzle')) {
+                                // İkiz İyon Motorları: Parlak İmparatorluk kırmızı egzoz ışıması (#ff1e1e)
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x1e293b,
-                                    emissive: 0xf87171,
-                                    emissiveIntensity: 1.0,
-                                    roughness: 0.35
+                                    color: 0x110000,
+                                    emissive: 0xff1e1e,
+                                    emissiveIntensity: 3.5,
+                                    roughness: 0.20,
+                                    metalness: 0.85
                                 });
                             } else {
-                                // Gövde küresi, pylon kolları ve koltuk: Aydınlık İmparatorluk çeliği
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x5a6a7e,
-                                    roughness: 0.38,
-                                    metalness: 0.6,
+                                // Gövde küresi, kanat pylon kolları, iskelet kirişleri (struts), çerçeveler ve göbekler:
+                                // İkonik İmparatorluk Durasteel Çeliği (#8fa0b2)
+                                child.material = new THREE.MeshPhysicalMaterial({
+                                    color: 0x8fa0b2,
+                                    roughness: 0.22,
+                                    metalness: 0.88,
+                                    clearcoat: 0.35,
+                                    clearcoatRoughness: 0.18,
                                     side: THREE.DoubleSide
                                 });
                             }
@@ -82,14 +84,53 @@ export class BiologicalTieFighter {
 
                     this.shipGroup.add(this.tieMesh);
 
-                    // Gemiye özel yerel aydınlatmalar: Siluetleşmeyi kesin olarak önler ve detayları öne çıkarır
-                    // 1. Üst Gövde Tepe Işığı: Kanat panelleri ve gövde çeliği üzerindeki detayları aydınlatır
-                    const shipTopLight = new THREE.PointLight(0xf1f5f9, 2.2, 28);
-                    shipTopLight.position.set(0, 4.2, 0);
+                    // Gemiye Özel 360° Sinematik Metalik Aydınlatma Teçhizatı (Metallic Specular Hero Rig):
+                    // 1. Arka-Üst Projektör (Chase Cam): Arkadan takipte gövde kavisinde, pylonlarda ve kanat kirişlerinde kristal netliğinde specular parıltı üretir
+                    const shipRearSpec = new THREE.DirectionalLight(0xffffff, 2.6);
+                    shipRearSpec.position.set(4.0, 7.5, -12.0);
+                    this.shipGroup.add(shipRearSpec);
+                    this.shipGroup.add(shipRearSpec.target);
+                    shipRearSpec.target.position.set(0, 0, 0);
+
+                    // 2. Sol-Arka Denge Işığı (Cool Specular Fill)
+                    const shipRearFill = new THREE.DirectionalLight(0xa5c4e8, 1.8);
+                    shipRearFill.position.set(-6.0, 4.5, -10.0);
+                    this.shipGroup.add(shipRearFill);
+                    this.shipGroup.add(shipRearFill.target);
+                    shipRearFill.target.position.set(0, 0, 0);
+
+                    // 3. Tepe Aydınlatması (Gövde ve Kokpit Üstü Çeliği)
+                    const shipTopLight = new THREE.PointLight(0xf8fafc, 2.2, 30);
+                    shipTopLight.position.set(0, 4.5, 0);
                     this.shipGroup.add(shipTopLight);
 
-                    // 2. İkiz İyon Motoru Arka Dolgu Işığı: Arkadan takipte motorları ve gövde hatlarını yumuşakça parlatır
-                    const engineGlowLight = new THREE.PointLight(0xf87171, 1.8, 14);
+                    // 4. Yan Dış Kanat Metalik Vurgu Işıkları: Dış yüzeydeki taşıyıcı kirişleri ve çerçeveleri parlatır
+                    const leftWingOuter = new THREE.PointLight(0xe0f2fe, 2.2, 20);
+                    leftWingOuter.position.set(-5.5, 2.0, -1.0);
+                    this.shipGroup.add(leftWingOuter);
+
+                    const rightWingOuter = new THREE.PointLight(0xe0f2fe, 2.2, 20);
+                    rightWingOuter.position.set(5.5, 2.0, -1.0);
+                    this.shipGroup.add(rightWingOuter);
+
+                    // 5. İç Kanat ve Pylon Vurgu Işıkları: Pylon borusunu, boğaz halkalarını ve iç kanat kafesini aydınlatır
+                    const leftPylonLight = new THREE.PointLight(0xdbeafe, 1.8, 14);
+                    leftPylonLight.position.set(-2.0, 1.5, -1.0);
+                    this.shipGroup.add(leftPylonLight);
+
+                    const rightPylonLight = new THREE.PointLight(0xdbeafe, 1.8, 14);
+                    rightPylonLight.position.set(2.0, 1.5, -1.0);
+                    this.shipGroup.add(rightPylonLight);
+
+                    // 6. Ön Karşı Işık (Cockpit Camından Sinek Pilotu ve Ön Gövdeyi Aydınlatır)
+                    const shipFrontSpec = new THREE.DirectionalLight(0xdbeafe, 1.5);
+                    shipFrontSpec.position.set(0, 3.5, 12.0);
+                    this.shipGroup.add(shipFrontSpec);
+                    this.shipGroup.add(shipFrontSpec.target);
+                    shipFrontSpec.target.position.set(0, 0, 0);
+
+                    // 7. İkiz İyon Motoru Arka Dolgu Işığı
+                    const engineGlowLight = new THREE.PointLight(0xff2222, 2.8, 16);
                     engineGlowLight.position.set(0, 0, -2.6);
                     this.shipGroup.add(engineGlowLight);
 
@@ -97,7 +138,7 @@ export class BiologicalTieFighter {
                     this.buildFlyPilot();
 
                     this.isLoaded = true;
-                    console.log('[TIE Fighter] ✓ GLTF Model & Biyolojik Sinek Kokpiti Hazır!');
+                    console.log('[TIE Fighter] ✓ GLTF Model (Lüks Gunmetal Metalik) & Biyolojik Sinek Kokpiti Hazır!');
                     resolve();
                 },
                 undefined,
@@ -105,7 +146,7 @@ export class BiologicalTieFighter {
                     console.warn('[TIE Fighter] GLTF yükleme uyarısı, prosedürel TIE Fighter kuruluyor:', err);
                     const fallbackGroup = new THREE.Group();
                     const cockpitGeo = new THREE.SphereGeometry(2.0, 16, 16);
-                    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x283240, roughness: 0.5, metalness: 0.7 });
+                    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x505c6d, roughness: 0.16, metalness: 0.94 });
                     fallbackGroup.add(new THREE.Mesh(cockpitGeo, cockpitMat));
 
                     const pylonGeo = new THREE.CylinderGeometry(0.3, 0.3, 8.0, 12);
@@ -114,7 +155,7 @@ export class BiologicalTieFighter {
 
                     const wingGeo = new THREE.CylinderGeometry(4.2, 4.2, 0.2, 6);
                     wingGeo.rotateZ(Math.PI / 2);
-                    const wingMat = new THREE.MeshStandardMaterial({ color: 0x121720, roughness: 0.4, metalness: 0.85 });
+                    const wingMat = new THREE.MeshStandardMaterial({ color: 0x242b35, roughness: 0.20, metalness: 0.90 });
                     const leftWing = new THREE.Mesh(wingGeo, wingMat);
                     leftWing.position.set(-4.0, 0, 0);
                     const rightWing = new THREE.Mesh(wingGeo, wingMat);

@@ -36,14 +36,14 @@ export class SpacewarsTrench {
                             child.castShadow = true;
                             child.receiveShadow = true;
 
-                            // Zemin kılavuz rayları (Pastel sky blue ışıma)
+                            // Zemin kılavuz rayları (İmparatorluk Kırmızısı #ff2a2a ışıma)
                             if (child.name.includes('rail')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x1e293b,
-                                    emissive: 0x38bdf8, // Pastel sky blue
-                                    emissiveIntensity: 0.55,
-                                    roughness: 0.45,
-                                    metalness: 0.75
+                                    color: 0x1f1414,
+                                    emissive: 0xff2a2a, // İmparatorluk Kırmızısı (#ff2a2a)
+                                    emissiveIntensity: 0.85,
+                                    roughness: 0.35,
+                                    metalness: 0.85
                                 });
                             } else if (child.name.includes('floor') || child.name.includes('dock')) {
                                 // Zemin için 8F8F8F HTML renk kodu - Yüksek Metalik
@@ -104,24 +104,19 @@ export class SpacewarsTrench {
     }
 
     addRunwayLights() {
-        // İki kenara yumuşak pastel gül & gök mavisi rehber ışık şeritleri
+        // İki kenara İmparatorluk Kırmızısı (#ff2a2a) rehber ışık şeritleri
         const lightGeo = new THREE.BoxGeometry(0.3, 0.2, 600);
         const redMat = new THREE.MeshStandardMaterial({
-            color: 0x334155,
-            emissive: 0xf87171, // Pastel soft rose/coral
-            emissiveIntensity: 0.5
-        });
-        const cyanMat = new THREE.MeshStandardMaterial({
-            color: 0x334155,
-            emissive: 0x38bdf8, // Pastel soft sky blue
-            emissiveIntensity: 0.5
+            color: 0x221111,
+            emissive: 0xff2a2a, // İmparatorluk Kırmızısı (#ff2a2a)
+            emissiveIntensity: 0.75
         });
 
         this.leftStrip = new THREE.Mesh(lightGeo, redMat);
         this.leftStrip.position.set(-44.0, 0.5, 250);
         this.scene.add(this.leftStrip);
 
-        this.rightStrip = new THREE.Mesh(lightGeo, cyanMat);
+        this.rightStrip = new THREE.Mesh(lightGeo, redMat);
         this.rightStrip.position.set(44.0, 0.5, 250);
         this.scene.add(this.rightStrip);
     }
@@ -184,12 +179,12 @@ export class SpacewarsTrench {
         rightPillar.position.set(46, 55.0, 2);
         this.endWall.add(rightPillar);
 
-        // 4. İmparatorluk Güç Hatları (Pastel Sky Blue & Amber Enerji Tüpleri)
+        // 4. İmparatorluk Güç Hatları (İmparatorluk Kırmızısı & Amber Enerji Tüpleri)
         const conduitGeo = new THREE.CylinderGeometry(1.2, 1.2, 120, 12);
-        const cyanMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, emissive: 0x38bdf8, emissiveIntensity: 0.6 });
+        const redConduitMat = new THREE.MeshStandardMaterial({ color: 0x1f1414, emissive: 0xff2a2a, emissiveIntensity: 0.75 });
         const amberMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, emissive: 0xfbbf24, emissiveIntensity: 0.6 });
 
-        const tubeL = new THREE.Mesh(conduitGeo, cyanMat);
+        const tubeL = new THREE.Mesh(conduitGeo, redConduitMat);
         tubeL.position.set(-36, 55.0, 11);
         this.endWall.add(tubeL);
 
@@ -224,7 +219,7 @@ export class SpacewarsTrench {
         const wallAmbient = new THREE.AmbientLight(0xffffff, 0.25);
         this.endWall.add(wallAmbient);
 
-        const fillLight = new THREE.PointLight(0x00f0ff, 0.5, 160);
+        const fillLight = new THREE.PointLight(0xff2a2a, 0.6, 160);
         fillLight.position.set(0, 35, -20);
         this.endWall.add(fillLight);
 

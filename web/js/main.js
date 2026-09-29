@@ -12,13 +12,13 @@
  */
 
 import * as THREE from 'three';
-import { SpacewarsTrench } from './spacewars_trench.js';
-import { BiologicalTieFighter } from './biological_tie.js';
-import { ExhaustPort } from './exhaust_port.js';
-import { NeuralHologram } from './neural_hologram.js';
-import { ProtonTorpedoSystem } from './proton_torpedoes.js';
-import { DeathStarStation } from './death_star.js';
-import { StarfieldSystem } from './starfield.js';
+import { SpacewarsTrench } from './spacewars_trench.js?v=6.0';
+import { BiologicalTieFighter } from './biological_tie.js?v=6.0';
+import { ExhaustPort } from './exhaust_port.js?v=6.0';
+import { NeuralHologram } from './neural_hologram.js?v=6.0';
+import { ProtonTorpedoSystem } from './proton_torpedoes.js?v=6.0';
+import { DeathStarStation } from './death_star.js?v=6.0';
+import { StarfieldSystem } from './starfield.js?v=6.0';
 
 window.THREE = THREE;
 
@@ -45,8 +45,12 @@ class SpacewarsSimulation {
         // Dinamik Çevre Haritası (PMREMGenerator HDRI) & PBR Panel/Bump Yüzey Dokuları
         this.envMap = null;
         this.trenchBumpMap = null;
+        this.tieBumpMap = null;
+        this.tieRoughnessMap = null;
+        this.tieSolarBumpMap = null;
         this.setupEnvironmentMap();
         this.createTrenchTextures();
+        this.createTieFighterTextures();
 
         // Alt Sistemler
         this.trench = new SpacewarsTrench(this.scene);
@@ -256,18 +260,37 @@ class SpacewarsSimulation {
             })
         );
 
-        // Siper (Trench / Death Star) modelini yükledikten hemen sonra traverse döngüsü:
-        // Tüm siper ve istasyon mesh'lerini açık gri PBR metalik kaplama ile donat
+        // 1. TIE Fighter İçin Özelleştirilmiş Metalik PBR Materyalleri (#2a2e33 koyu gunmetal, metalness: 0.86, roughness: 0.34, envMap)
+        if (this.tieFighter) {
+            if (this.tieFighter.tieMesh) this.applyMetallicTieFighterMaterials(this.tieFighter.tieMesh);
+            else if (this.tieFighter.shipGroup) this.applyMetallicTieFighterMaterials(this.tieFighter.shipGroup);
+        }
+
+        // 2. Siper (Trench) Modelleri İçin Açık Gri Metalik Kaplama & Mavi -> İmparatorluk Kırmızısı Vurgular
         if (this.trench) {
             if (this.trench.baseTemplate) this.applyMetallicTrenchMaterials(this.trench.baseTemplate);
             if (this.trench.modules) this.trench.modules.forEach(m => this.applyMetallicTrenchMaterials(m));
             if (this.trench.endWall) this.applyMetallicTrenchMaterials(this.trench.endWall);
         }
-        if (this.deathStar && this.deathStar.model) {
-            this.applyMetallicTrenchMaterials(this.deathStar.model);
+
+        // 3. Death Star İstasyonu (Kameradan bağımsız sahnede hemen aktif, envMap & frustumCulled = false)
+        if (this.deathStar) {
+            this.deathStar.setSpawned(true);
+            if (this.deathStar.model) {
+                this.deathStar.model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.frustumCulled = false;
+                        if (child.material) {
+                            child.material.envMap = this.envMap;
+                            child.material.envMapIntensity = 1.6;
+                            child.material.needsUpdate = true;
+                        }
+                    }
+                });
+            }
         }
 
-        console.log('[Preload] ✓ Tüm 3D uzay ve boss varlıkları açık gri metalik PBR kaplamalarla hazırlandı!');
+        console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı) hazırlandı!');
     }
 
     /**
@@ -582,13 +605,289 @@ class SpacewarsSimulation {
     }
 
     /**
-     * GLTF Siper (Trench / Death Star) Modelleri İçin Metalik Açık Gri PBR Kaplama.
+     * TIE Fighter İçin Yüksek Çözünürlüklü Prosedürel PBR Yüzey ve Güneş Paneli Dokuları:
+     * - this.tieBumpMap: Fırçalanmış titanyum / durasteel mikro-çizikleri, zırh derz çizgileri ve perçinler.
+     * - this.tieRoughnessMap: Parlak metalik yüzey (0.16 gloss) ve kaynak derzleri (0.35) ayrımı.
+     * - this.tieSolarBumpMap: Star Wars altıgen kanat fotovoltaik hücre desenleri ve iletken mikro-hatlar.
+     */
+    createTieFighterTextures() {
+        try {
+            const size = 512;
+            
+            // 1. TIE Fighter Gövde ve İskelet Bump Map (Fırçalanmış Durasteel & Perçinler)
+            const bCanvas = document.createElement('canvas');
+            bCanvas.width = size;
+            bCanvas.height = size;
+            const bCtx = bCanvas.getContext('2d');
+            bCtx.fillStyle = '#808080';
+            bCtx.fillRect(0, 0, size, size);
+
+            // Zırh plakaları ve derz çizgileri
+            const pSize = 64;
+            bCtx.lineWidth = 2;
+            for (let x = 0; x <= size; x += pSize) {
+                bCtx.strokeStyle = '#222222';
+                bCtx.beginPath();
+                bCtx.moveTo(x, 0);
+                bCtx.lineTo(x, size);
+                bCtx.stroke();
+
+                bCtx.strokeStyle = '#cccccc';
+                bCtx.lineWidth = 1;
+                bCtx.beginPath();
+                bCtx.moveTo(x + 1, 0);
+                bCtx.lineTo(x + 1, size);
+                bCtx.stroke();
+                bCtx.lineWidth = 2;
+            }
+            for (let y = 0; y <= size; y += pSize) {
+                bCtx.strokeStyle = '#222222';
+                bCtx.beginPath();
+                bCtx.moveTo(0, y);
+                bCtx.lineTo(size, y);
+                bCtx.stroke();
+
+                bCtx.strokeStyle = '#cccccc';
+                bCtx.lineWidth = 1;
+                bCtx.beginPath();
+                bCtx.moveTo(0, y + 1);
+                bCtx.lineTo(size, y + 1);
+                bCtx.stroke();
+                bCtx.lineWidth = 2;
+            }
+
+            // Perçinler
+            bCtx.fillStyle = '#333333';
+            for (let p = 0; p < size; p += pSize) {
+                for (let off = 10; off < pSize; off += 16) {
+                    bCtx.beginPath();
+                    bCtx.arc(p + off, p + 4, 1.2, 0, Math.PI * 2);
+                    bCtx.fill();
+                    bCtx.beginPath();
+                    bCtx.arc(p + 4, p + off, 1.2, 0, Math.PI * 2);
+                    bCtx.fill();
+                }
+            }
+
+            // Fırçalanmış metal mikro-çizikleri (Brushed durasteel grain)
+            const imgData = bCtx.getImageData(0, 0, size, size);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const noise = (Math.random() - 0.5) * 36;
+                data[i] = Math.min(255, Math.max(0, data[i] + noise));
+                data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+                data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+            }
+            bCtx.putImageData(imgData, 0, 0);
+
+            this.tieBumpMap = new THREE.CanvasTexture(bCanvas);
+            this.tieBumpMap.wrapS = THREE.RepeatWrapping;
+            this.tieBumpMap.wrapT = THREE.RepeatWrapping;
+            this.tieBumpMap.repeat.set(4, 4);
+
+            // 2. TIE Fighter Roughness Map (Yüksek yansıtıcı parlak metal)
+            const rCanvas = document.createElement('canvas');
+            rCanvas.width = size;
+            rCanvas.height = size;
+            const rCtx = rCanvas.getContext('2d');
+            rCtx.fillStyle = '#262626'; // ~0.15 pürüzlülük = kristal netliğinde ayna metal
+            rCtx.fillRect(0, 0, size, size);
+
+            rCtx.strokeStyle = '#555555';
+            rCtx.lineWidth = 2;
+            for (let x = 0; x <= size; x += pSize) {
+                rCtx.beginPath();
+                rCtx.moveTo(x, 0);
+                rCtx.lineTo(x, size);
+                rCtx.stroke();
+            }
+            for (let y = 0; y <= size; y += pSize) {
+                rCtx.beginPath();
+                rCtx.moveTo(0, y);
+                rCtx.lineTo(size, y);
+                rCtx.stroke();
+            }
+
+            this.tieRoughnessMap = new THREE.CanvasTexture(rCanvas);
+            this.tieRoughnessMap.wrapS = THREE.RepeatWrapping;
+            this.tieRoughnessMap.wrapT = THREE.RepeatWrapping;
+            this.tieRoughnessMap.repeat.set(4, 4);
+
+            // 3. TIE Solar Array Kanat Hücre Deseni (Fotovoltaik solar panel)
+            const sCanvas = document.createElement('canvas');
+            sCanvas.width = size;
+            sCanvas.height = size;
+            const sCtx = sCanvas.getContext('2d');
+            sCtx.fillStyle = '#808080';
+            sCtx.fillRect(0, 0, size, size);
+
+            const grid = 32;
+            sCtx.lineWidth = 1;
+            sCtx.strokeStyle = '#181818';
+            for (let x = 0; x <= size; x += grid) {
+                sCtx.beginPath();
+                sCtx.moveTo(x, 0);
+                sCtx.lineTo(x, size);
+                sCtx.stroke();
+            }
+            for (let y = 0; y <= size; y += grid) {
+                sCtx.beginPath();
+                sCtx.moveTo(0, y);
+                sCtx.lineTo(size, y);
+                sCtx.stroke();
+            }
+            // İletken mikro-çizgiler
+            sCtx.strokeStyle = '#b8b8b8';
+            for (let y = grid / 2; y <= size; y += grid) {
+                sCtx.beginPath();
+                sCtx.moveTo(0, y);
+                sCtx.lineTo(size, y);
+                sCtx.stroke();
+            }
+
+            this.tieSolarBumpMap = new THREE.CanvasTexture(sCanvas);
+            this.tieSolarBumpMap.wrapS = THREE.RepeatWrapping;
+            this.tieSolarBumpMap.wrapT = THREE.RepeatWrapping;
+            this.tieSolarBumpMap.repeat.set(6, 6);
+
+            console.log('[Material] ✓ TIE Fighter fırçalanmış çelik ve solar panel PBR dokuları hazırlandı!');
+        } catch (err) {
+            console.error('[Material] TIE dokuları oluşturma hatası:', err);
+        }
+    }
+
+    /**
+     * 1. TIE Fighter İçin Özelleştirilmiş Üst Düzey Metalik PBR Materyal Ayarları:
+     * Siper duvarlarındaki açık griden (#a9b3bd / #8f8f8f) farklı ve daha koyu tonda:
+     * - Gövde küresi, kanat pylon kolları, taşıyıcı iskelet kolları (spoke struts), çevre çerçevesi (rim)
+     *   ve merkez göbek (hub): Lüks İmparatorluk Gunmetal Çeliği (#505c6d)
+     *   metalness: 0.94, roughness: 0.16, envMapIntensity: 3.2, bumpMap: this.tieBumpMap
+     * - Altıgen güneş paneli kanatları (Wings): Koyu Karbon/Titanyum (#242b35)
+     *   metalness: 0.90, roughness: 0.20, envMapIntensity: 2.5, bumpMap: this.tieSolarBumpMap
+     * - İkiz İyon Motoru Egzozları (Engines): Parlayan İmparatorluk Kırmızısı #ff2a2a (intensity: 3.0)
+     * - Kokpit şeffaf kubbesi (glass/canopy) ve biyolojik sinek pilot organları korunur.
+     */
+    applyMetallicTieFighterMaterials(model) {
+        if (!model) return;
+        model.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                const name = (child.name || '').toLowerCase();
+
+                // Düzgün normaller ve UV haritalaması
+                if (child.geometry) {
+                    if (child.geometry.index) {
+                        child.geometry = child.geometry.toNonIndexed();
+                    }
+                    child.geometry.computeVertexNormals();
+                    if (!child.geometry.attributes.uv) {
+                        const pos = child.geometry.attributes.position;
+                        if (pos) {
+                            const uvs = new Float32Array(pos.count * 2);
+                            for (let i = 0; i < pos.count; i++) {
+                                const y = pos.getY(i);
+                                const z = pos.getZ(i);
+                                uvs[i * 2] = (y + 8) / 16;
+                                uvs[i * 2 + 1] = (z + 8) / 16;
+                            }
+                            child.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                            child.geometry.attributes.uv.needsUpdate = true;
+                        }
+                    }
+                }
+
+                // 1. Şeffaf kokpit camını koru (Biyo-sinek pilotun net görünmesi için)
+                if (name.includes('glass') || name.includes('canopy')) {
+                    if (child.material) {
+                        child.material.transparent = true;
+                        child.material.opacity = 0.22;
+                        child.material.depthWrite = false;
+                        child.material.envMap = this.envMap;
+                        child.material.envMapIntensity = 0.8;
+                        child.material.needsUpdate = true;
+                    }
+                    return;
+                }
+
+                // 2. Biyolojik sinek pilotu organlarını koru
+                if (name.includes('eye') || name.includes('thorax') || name.includes('abdomen') ||
+                    name.includes('wing_fly') || name.includes('holo')) {
+                    return;
+                }
+
+                // Kokpit içi biyo-pilot kaidesi / koltuğu
+                if (name.includes('seat')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x242a32,
+                        roughness: 0.28,
+                        metalness: 0.85,
+                        envMap: this.envMap,
+                        envMapIntensity: 1.8
+                    });
+                    return;
+                }
+
+                // 3. İkiz İyon Motoru Egzozları (Kırmızı İmparatorluk İtki Işıltısı)
+                if (name.includes('engine') && !name.includes('block') && !name.includes('nozzle')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x110000,
+                        emissive: 0xff1e1e,       // Parlak İmparatorluk Kırmızı (#ff1e1e)
+                        emissiveIntensity: 3.5,
+                        roughness: 0.20,
+                        metalness: 0.85,
+                        envMap: this.envMap,
+                        envMapIntensity: 1.2
+                    });
+                    return;
+                }
+
+                // 4. Altıgen Güneş Paneli Plakaları (Koyu Karbon / Fotovoltaik Solar Hücreler)
+                // Sadece ana kanat plakaları (metalik iskelet kolları ve çerçeveler hariç)
+                if ((name === 'left_wing' || name === 'right_wing') && !name.includes('strut') && !name.includes('rim') && !name.includes('hub')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x14181f,          // Koyu Karbon/Fotovoltaik Siyah Paneller
+                        roughness: 0.58,          // Dağınık mikro-ızgara yutuculuğu
+                        metalness: 0.28,          // Fotovoltaik hücre yarı-iletkenliği
+                        bumpMap: this.tieSolarBumpMap,
+                        bumpScale: 0.04,
+                        envMap: this.envMap,
+                        envMapIntensity: 0.6,
+                        side: THREE.DoubleSide
+                    });
+                    return;
+                }
+
+                // 5. Ana Gövde Küresi, Kanat Pylon Kolları, İskelet Kolları (Struts), Çerçeveler (Rims),
+                // Merkez Göbek (Hub), Motor Bloğu ve Egzoz Çerçeveleri
+                // (İkonik İmparatorluk Battleship/Durasteel Çeliği #8fa0b2)
+                child.material = new THREE.MeshPhysicalMaterial({
+                    color: 0x8fa0b2,              // İkonik İmparatorluk Battleship Çeliği (#8fa0b2)
+                    roughness: 0.22,              // Pürüzsüz metalik yüzey = keskin ve göz alıcı specular parlamalar
+                    metalness: 0.88,              // Yüksek metalik iletkenlik
+                    clearcoat: 0.35,              // Zırh üstü metalik cila/gleam
+                    clearcoatRoughness: 0.18,
+                    envMap: this.envMap,
+                    envMapIntensity: 2.4,         // Dinamik uzay ve nebula yansımaları
+                    bumpMap: this.tieBumpMap,
+                    bumpScale: 0.03,
+                    roughnessMap: this.tieRoughnessMap,
+                    side: THREE.DoubleSide
+                });
+            }
+        });
+        console.log('[Material] ✓ TIE Fighter gerçekçi İmparatorluk Durasteel (#8fa0b2) MeshPhysicalMaterial ve fotovoltaik solar paneller uygulandı!');
+    }
+
+    /**
+     * GLTF Siper (Trench) Modelleri İçin Metalik Açık Gri PBR Kaplama ve
+     * Mavi -> İmparatorluk Kırmızısı (#ff2a2a) Vurgu Renkleri Değişimi.
      * 2. Fiziksel PBR Materyal Ayarları:
-     * - color: #a9b3bd (açık uzay grisi)
-     * - metalness: 0.85 (Yüksek yansıtıcılık)
-     * - roughness: 0.35 (Çok mat olmasın, ışık parlamaları yüzeyde süzülsün)
-     * - envMapIntensity: 1.8 (1.5 - 2.0 aralığında belirgin metalik yansıma gücü)
-     * - bumpMap: this.trenchBumpMap (panel çizgileri, perçinler, mikro-çizikler)
+     * - color: #a9b3bd (duvar açık uzay grisi), #8f8f8f (zemin)
+     * - metalness: 0.85 - 0.88 (Yüksek yansıtıcılık)
+     * - roughness: 0.35 - 0.40 (Işık parlamaları yüzeyde süzülsün)
+     * - envMapIntensity: 1.8 (Belirgin metalik yansıma gücü)
+     * - Mavi detaylar/raylar/ışıklar: #ff2a2a İmparatorluk Kırmızısı
      */
     applyMetallicTrenchMaterials(model) {
         if (!model) return;
@@ -625,16 +924,28 @@ class SpacewarsSimulation {
                     }
                 }
 
-                // Zemin kılavuz rayları hariç tüm duvar ve siper objeleri
-                if (child.name.includes('rail')) {
+                // 2. Mavi kaplamaları ve emissive materyalleri tespit edip İmparatorluk Kırmızısına (#ff2a2a) çevir
+                const origMat = child.material;
+                const isBlueAccent = (
+                    child.name.includes('rail') ||
+                    child.name.includes('conduit') ||
+                    child.name.includes('strip') ||
+                    child.name.includes('blue') ||
+                    child.name.includes('cyan') ||
+                    (origMat && origMat.color && (origMat.color.b > origMat.color.r + 0.12)) ||
+                    (origMat && origMat.emissive && (origMat.emissive.b > origMat.emissive.r + 0.12))
+                );
+
+                if (isBlueAccent) {
+                    // Siper içi kırmızı imparatorluk kılavuz rayları / vurguları (#ff2a2a)
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0x1e293b,
-                        emissive: 0x38bdf8,
-                        emissiveIntensity: 0.55,
-                        roughness: 0.45,
-                        metalness: 0.75,
+                        color: 0x1f1414,
+                        emissive: 0xff2a2a,       // İmparatorluk Kırmızısı (#ff2a2a)
+                        emissiveIntensity: 0.85,  // Belirgin kırmızı ışıltı
+                        roughness: 0.35,
+                        metalness: 0.85,
                         envMap: this.envMap,
-                        envMapIntensity: 1.0
+                        envMapIntensity: 1.5
                     });
                 } else if (child.name.includes('floor') || child.name.includes('dock')) {
                     // Zemin için 8F8F8F HTML renk kodu - Yüksek Metalik
@@ -702,12 +1013,12 @@ class SpacewarsSimulation {
         this.camera.add(this.camLight.target);
         this.scene.add(this.camera);
 
-        // 5. Yumuşak pastel atmosferik nokta ışıkları (Pastel gül & gök mavisi)
+        // 5. İmparatorluk atmosferik nokta ışıkları (Pastel gül & İmparatorluk kırmızısı)
         const pointRose = new THREE.PointLight(0xf472b6, 0.5, 90);
         pointRose.position.set(-20, 10, 40);
         this.scene.add(pointRose);
 
-        const pointSky = new THREE.PointLight(0x38bdf8, 0.5, 90);
+        const pointSky = new THREE.PointLight(0xff2a2a, 0.6, 90); // İmparatorluk kırmızı atmosfer ışığı (#ff2a2a)
         pointSky.position.set(20, 10, 40);
         this.scene.add(pointSky);
     }
@@ -1533,7 +1844,6 @@ class SpacewarsSimulation {
         } else if (this.cameraMode === 4) {
             // Mode 4: Death Star Station Orbit Cam (Ölüm Yıldızı Modeli Detaylı Gözlem)
             if (this.deathStar && this.deathStar.isLoaded) {
-                this.deathStar.setSpawned(true);
                 const dsPos = this.deathStar.group.position;
                 const camAngle = this.flightTime * 0.25;
                 const dist = 340.0;
@@ -1657,9 +1967,6 @@ class SpacewarsSimulation {
 
     setCameraMode(mode) {
         this.cameraMode = mode;
-        if (mode === 4 && this.deathStar) {
-            this.deathStar.setSpawned(true);
-        }
         ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar'].forEach((id, idx) => {
             const btn = document.getElementById(id);
             if (btn) {
@@ -1688,8 +1995,10 @@ class SpacewarsSimulation {
         this.survivalTimer = 0.0;
         this.cameraTrauma = 0.0;
 
-        // Ölüm Yıldızı İstasyonunu Gizle (1 Dakika Hayatta Kalma Sayacı Başlatılır)
-        this.deathStar.setSpawned(false);
+        // Ölüm Yıldızı İstasyonu kameradan bağımsız daima aktif ve görünür kalır
+        if (this.deathStar) {
+            this.deathStar.setSpawned(true);
+        }
 
         this.torpedoes.reset();
         this.trench.resetFinale();

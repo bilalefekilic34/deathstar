@@ -33,7 +33,7 @@ def create_trench_module():
     for x in [-35, -15, 15, 35]:
         rail = trimesh.creation.box([2, 1, 120])
         rail.apply_translation([x, 0.5, 0])
-        rail.visual.face_colors = [56, 189, 248, 220] # Pastel sky blue hat
+        rail.visual.face_colors = [255, 42, 42, 255] # İmparatorluk Kırmızı hat (#ff2a2a)
         scene.add_geometry(rail, node_name=f"floor_rail_{x}")
 
     # 2. Sol ve Sağ Masif Duvarlar (Açık Uzay Grisi #a9b3bd)
@@ -98,70 +98,154 @@ def create_tie_fighter():
     # 1. Kokpit Küresi (Dış Gövde - Ön ve Üst Cam Pencereleri Açık)
     cockpit = trimesh.creation.icosphere(subdivisions=4, radius=2.3)
     centers = cockpit.triangles_center
-    # Ön cam ve üst cam alanlarını açık bırakarak iç mekanın ve sinek pilotun görünmesini sağla
     mask = ~((centers[:, 2] > 1.3) & (centers[:, 0]**2 + centers[:, 1]**2 < 2.0**2))
     mask &= ~((centers[:, 1] > 1.4) & (centers[:, 0]**2 + centers[:, 2]**2 < 1.7**2))
     cockpit.update_faces(mask)
-    cockpit.visual.face_colors = [70, 85, 105, 255] # İmparatorluk açık gri metal
+    cockpit.visual.face_colors = [120, 135, 150, 255] # İmparatorluk Durasteel Çeliği
     scene.add_geometry(cockpit, node_name="cockpit_hull")
 
-    # 2. Ön Şeffaf Cam Kubbe (Kokpit Camı - Three.js'te cam materyali uygulanacak)
-    canopy = trimesh.creation.cylinder(radius=1.35, height=0.25)
-    rotate_mesh(canopy, np.pi / 2, [1, 0, 0])
+    # Ön Görüş Penceresi Metalik Çerçeve Halkası (+Z yönünde içi boş dairesel halka)
+    viewport_ring = trimesh.creation.annulus(r_min=1.2, r_max=1.55, height=0.2)
+    viewport_ring.apply_translation([0, 0, 2.18])
+    viewport_ring.visual.face_colors = [140, 155, 170, 255]
+    scene.add_geometry(viewport_ring, node_name="viewport_ring")
+
+    # 2. Ön Şeffaf Cam Kubbe (+Z yönü - İnce şeffaf cam plaka)
+    canopy = trimesh.creation.cylinder(radius=1.25, height=0.05)
     canopy.apply_translation([0, 0, 2.15])
-    canopy.visual.face_colors = [147, 197, 253, 110] # Şeffaf camgöbeği
+    canopy.visual.face_colors = [147, 197, 253, 110]
     scene.add_geometry(canopy, node_name="cockpit_canopy_glass")
 
-    # Üst Tavan Cam Kapağı (Sinek ve Nöral Hologramın Üstten Net Görülmesi İçin)
-    top_glass = trimesh.creation.cylinder(radius=1.2, height=0.25)
+    # Üst Tavan Cam Kapağı (+Y yönü - İnce şeffaf cam)
+    rot_x = trimesh.transformations.rotation_matrix(np.pi / 2, [1, 0, 0])
+    top_glass = trimesh.creation.cylinder(radius=1.1, height=0.05)
+    top_glass.apply_transform(rot_x)
     top_glass.apply_translation([0, 2.15, 0])
     top_glass.visual.face_colors = [147, 197, 253, 110]
     scene.add_geometry(top_glass, node_name="cockpit_top_glass")
 
-    # 3. İkiz İyon Motoru Egzozları (Kırmızı Parlama)
+    # Üst Kapak Metalik Boğazı (+Y yönü - İçi boş metal halka)
+    top_ring = trimesh.creation.annulus(r_min=1.1, r_max=1.45, height=0.2)
+    top_ring.apply_transform(rot_x)
+    top_ring.apply_translation([0, 2.18, 0])
+    top_ring.visual.face_colors = [140, 155, 170, 255]
+    scene.add_geometry(top_ring, node_name="top_hatch_ring")
+
+    # 3. Arka İkiz İyon Motor Bloğu & Nozzlları (-Z yönü)
+    eng_block = trimesh.creation.box([2.4, 1.4, 0.8])
+    eng_block.apply_translation([0, 0, -1.9])
+    eng_block.visual.face_colors = [110, 125, 140, 255]
+    scene.add_geometry(eng_block, node_name="engine_block")
+
     for x in [-0.65, 0.65]:
-        eng = trimesh.creation.cylinder(radius=0.35, height=0.6)
-        rotate_mesh(eng, np.pi / 2, [1, 0, 0])
-        eng.apply_translation([x, 0, -2.15])
-        eng.visual.face_colors = [255, 0, 60, 255] # Parlak neon kırmızı
+        nozzle = trimesh.creation.cylinder(radius=0.48, height=0.6)
+        nozzle.apply_translation([x, 0, -2.25])
+        nozzle.visual.face_colors = [140, 155, 170, 255]
+        scene.add_geometry(nozzle, node_name=f"engine_nozzle_{x}")
+
+        eng = trimesh.creation.cylinder(radius=0.32, height=0.55)
+        eng.apply_translation([x, 0, -2.26])
+        eng.visual.face_colors = [255, 42, 42, 255] # Parlak İmparatorluk kırmızı
         scene.add_geometry(eng, node_name=f"engine_{x}")
 
-    # 4. Kanat Bağlantı Kolları (Wing Pylons)
-    pylon = trimesh.creation.cylinder(radius=0.5, height=7.2)
-    rotate_mesh(pylon, np.pi / 2, [0, 0, 1])
-    pylon.visual.face_colors = [70, 85, 100, 255]
+    # 4. Kanat Bağlantı Kolları (Wing Pylons - X ekseni boyunca yatay silindir)
+    rot_y = trimesh.transformations.rotation_matrix(np.pi / 2, [0, 1, 0])
+    pylon = trimesh.creation.cylinder(radius=0.52, height=7.6)
+    pylon.apply_transform(rot_y)
+    pylon.visual.face_colors = [130, 145, 160, 255]
     scene.add_geometry(pylon, node_name="wing_pylon")
 
+    for x in [-2.4, 2.4]:
+        collar = trimesh.creation.cylinder(radius=0.75, height=0.8)
+        collar.apply_transform(rot_y)
+        collar.apply_translation([x, 0, 0])
+        collar.visual.face_colors = [140, 155, 170, 255]
+        scene.add_geometry(collar, node_name=f"pylon_collar_{x}")
+
     # 5. Altıgen Güneş Paneli Kanatları (Solar Array Wings)
-    w_pts = np.array([
-        [0.0, 6.8],
-        [4.2, 3.4],
-        [4.2, -3.4],
-        [0.0, -6.8],
-        [-4.2, -3.4],
-        [-4.2, 3.4]
-    ])
-    
-    polygon = trimesh.path.polygons.Polygon(w_pts)
-    wing_mesh = trimesh.creation.extrude_polygon(polygon, height=0.25)
-    rotate_mesh(wing_mesh, np.pi / 2, [0, 1, 0])
+    # Z ileri-geri, Y yukarı-aşağı, X sol-sağ ekseni
+    w_pts_zy = [
+        (0.0, 6.8),    # Tepe noktası
+        (4.2, 3.4),    # Ön-üst köşe
+        (4.2, -3.4),   # Ön-alt köşe
+        (0.0, -6.8),   # Dip noktası
+        (-4.2, -3.4),  # Arka-alt köşe
+        (-4.2, 3.4),   # Arka-üst köşe
+    ]
 
-    # Sol Kanat
-    left_wing = wing_mesh.copy()
-    left_wing.apply_translation([-3.7, 0, 0])
-    left_wing.visual.face_colors = [15, 18, 24, 255] # Siyah fotovoltaik panel
-    scene.add_geometry(left_wing, node_name="left_wing")
+    def make_beam(p1, p2, thickness=0.34):
+        p1 = np.array(p1, dtype=float)
+        p2 = np.array(p2, dtype=float)
+        vec = p2 - p1
+        length = np.linalg.norm(vec)
+        if length < 1e-6:
+            return None
+        cyl = trimesh.creation.cylinder(radius=thickness / 2, height=length)
+        cyl_dir = np.array([0, 0, 1.0])
+        target_dir = vec / length
+        if np.allclose(cyl_dir, target_dir):
+            mat = np.eye(4)
+        elif np.allclose(cyl_dir, -target_dir):
+            mat = trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0])
+        else:
+            rot_axis = np.cross(cyl_dir, target_dir)
+            rot_axis /= np.linalg.norm(rot_axis)
+            angle = np.arccos(np.clip(np.dot(cyl_dir, target_dir), -1.0, 1.0))
+            mat = trimesh.transformations.rotation_matrix(angle, rot_axis)
+        mat[:3, 3] = (p1 + p2) / 2
+        cyl.apply_transform(mat)
+        return cyl
 
-    # Sağ Kanat
-    right_wing = wing_mesh.copy()
-    right_wing.apply_translation([3.7, 0, 0])
-    right_wing.visual.face_colors = [15, 18, 24, 255]
-    scene.add_geometry(right_wing, node_name="right_wing")
+    # Kanat gövde paneli geometrisi
+    pts_yz = np.array([[y, z] for z, y in w_pts_zy])
+    poly = trimesh.path.polygons.Polygon(pts_yz)
+    panel_raw = trimesh.creation.extrude_polygon(poly, height=0.18)
+    v = panel_raw.vertices.copy()
+    new_v = np.zeros_like(v)
+    new_v[:, 0] = v[:, 2] - 0.09 # X ekseninde kalınlık
+    new_v[:, 1] = v[:, 0]        # Y ekseni
+    new_v[:, 2] = v[:, 1]        # Z ekseni
+    panel_raw.vertices = new_v
+    panel_raw.fix_normals()
 
-    # 6. Kokpit İçi Pilot Kaidesi (3D Sineğin Oturacağı Biyo-Koltuk)
+    for side_name, side_x in [("left", -3.8), ("right", 3.8)]:
+        # A. Koyu Karbon/Fotovoltaik Güneş Paneli
+        wing_plate = panel_raw.copy()
+        wing_plate.apply_translation([side_x, 0, 0])
+        wing_plate.visual.face_colors = [22, 25, 30, 255]
+        scene.add_geometry(wing_plate, node_name=f"{side_name}_wing")
+
+        # B. 6 Adet Yapısal Metalik Taşıyıcı Kiriş (Spoke Struts)
+        spokes = []
+        for z, y in w_pts_zy:
+            b = make_beam([side_x, 0, 0], [side_x, y, z], thickness=0.36)
+            spokes.append(b)
+        struts_mesh = trimesh.util.concatenate(spokes)
+        struts_mesh.visual.face_colors = [135, 150, 165, 255]
+        scene.add_geometry(struts_mesh, node_name=f"wing_struts_{side_name}")
+
+        # C. Dış Altıgen Metalik Çerçeve (Outer Rim)
+        rims = []
+        for i in range(6):
+            z1, y1 = w_pts_zy[i]
+            z2, y2 = w_pts_zy[(i + 1) % 6]
+            b = make_beam([side_x, y1, z1], [side_x, y2, z2], thickness=0.38)
+            rims.append(b)
+        rim_mesh = trimesh.util.concatenate(rims)
+        rim_mesh.visual.face_colors = [135, 150, 165, 255]
+        scene.add_geometry(rim_mesh, node_name=f"wing_rim_{side_name}")
+
+        # D. Kanat Merkez Metalik Göbeği (Central Wing Hub)
+        hub = trimesh.creation.cylinder(radius=1.4, height=0.6)
+        hub.apply_transform(rot_y)
+        hub.apply_translation([side_x, 0, 0])
+        hub.visual.face_colors = [145, 160, 175, 255]
+        scene.add_geometry(hub, node_name=f"wing_hub_{side_name}")
+
+    # 7. Kokpit İçi Pilot Kaidesi (3D Sineğin Oturacağı Biyo-Koltuk)
     seat = trimesh.creation.box([1.0, 0.4, 1.0])
     seat.apply_translation([0, -0.6, 0])
-    seat.visual.face_colors = [40, 50, 65, 255]
+    seat.visual.face_colors = [30, 36, 44, 255]
     scene.add_geometry(seat, node_name="pilot_seat")
 
     out_path = os.path.join(MODELS_DIR, "tie_fighter.glb")

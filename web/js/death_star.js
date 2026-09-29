@@ -37,13 +37,13 @@ export class DeathStarStation {
         this.hitFlashTimer = 0.0;
         this.materials = [];
 
-        // 1 Dakikalık Hayatta Kalma Sonrası Belirme (Spawn) Durumu
-        this.isSpawned = false;
-        this.group.visible = false;
+        // Ölüm Yıldızı Görünürlük Durumu (Kameradan bağımsız daima aktif)
+        this.isSpawned = true;
+        this.group.visible = true;
     }
 
     setSpawned(spawned) {
-        this.isSpawned = !!spawned;
+        this.isSpawned = (spawned !== undefined) ? !!spawned : true;
         this.group.visible = this.isSpawned;
         if (this.dsFrontLight) this.dsFrontLight.visible = this.isSpawned;
         if (this.dsRimLight) this.dsRimLight.visible = this.isSpawned;
@@ -83,14 +83,21 @@ export class DeathStarStation {
                 const dsAmbient = new THREE.AmbientLight(0x99aabf, 0.45);
                 this.group.add(dsAmbient);
 
-                // ASENKRON ÖN YÜKLEME (Pre-load): Başlangıçta kameranın çok uzağına sakla (-50,000m)
-                this.group.position.set(0, 175.0, -50000.0);
-                this.group.visible = false;
-                if (this.dsFrontLight) this.dsFrontLight.visible = false;
-                if (this.dsRimLight) this.dsRimLight.visible = false;
+                // Tüm mesh'lerde frustum culling'i devre dışı bırak (Kamera açısından bağımsız görünürlük)
+                this.group.traverse((child) => {
+                    if (child.isMesh) {
+                        child.frustumCulled = false;
+                    }
+                });
+
+                // Başlangıç göksel konumu: Siperin ilerisinde, derin uzayda heybetli görünüm
+                this.group.position.set(0, 175.0, 650.0);
+                this.group.visible = true;
+                if (this.dsFrontLight) this.dsFrontLight.visible = true;
+                if (this.dsRimLight) this.dsRimLight.visible = true;
 
                 this.isLoaded = true;
-                console.log('[DeathStar] ✓ Ölüm Yıldızı İstasyonu Başarıyla Önceden Yüklendi (Pre-loaded)!');
+                console.log('[DeathStar] ✓ Ölüm Yıldızı İstasyonu Başarıyla Yüklendi ve Sahnede Aktif Kılındı!');
                 resolve();
             };
 
@@ -228,15 +235,7 @@ export class DeathStarStation {
     update(shipZ, dt = 0.016, isFinale = false, finalTargetZ = 0) {
         try {
             if (!this.isLoaded) return;
-
-            // 1 Dakika hayatta kalma kuralı: Spawn tetiklenmeden veya final başlamadan görünmez
-            if (!this.isSpawned && !isFinale) {
-                this.group.visible = false;
-                if (this.dsFrontLight) this.dsFrontLight.visible = false;
-                if (this.dsRimLight) this.dsRimLight.visible = false;
-                return;
-            }
-
+            // Ölüm Yıldızı İstasyonu kameradan bağımsız olarak sahnede daima görünür
             this.group.visible = true;
             if (this.dsFrontLight) this.dsFrontLight.visible = true;
             if (this.dsRimLight) this.dsRimLight.visible = true;

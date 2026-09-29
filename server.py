@@ -30,6 +30,14 @@ except ImportError:
 
 app = FastAPI(title="Death Star v2: Drosophila SNN Flight Control")
 
+@app.middleware("http")
+async def add_no_cache_header(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 # Statik Dosyalar
 WEB_DIR = os.path.join(CURRENT_DIR, "web")
 MODELS_DIR = os.path.join(CURRENT_DIR, "models")
