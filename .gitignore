@@ -5,7 +5,7 @@ __pycache__/
 *.so
 
 # API keys, tokens & secrets
-zort.py
+api.py
 .env
 *.token
 *.key

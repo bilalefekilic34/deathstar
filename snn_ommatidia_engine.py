@@ -17,14 +17,14 @@ import math
 import time
 import numpy as np
 
-# API KEY IMPORT (Hassas anahtar için zort.py veya ortam değişkeni kullanılır)
+# API KEY IMPORT
 try:
-    from zort import YOUR_API_KEY
+    from api import YOUR_API_KEY
 except ImportError:
     try:
         import sys
         sys.path.append("..")
-        from zort import YOUR_API_KEY
+        from api import YOUR_API_KEY
     except ImportError:
         import os
         YOUR_API_KEY = os.environ.get("NEUPRINT_APPLICATION_CREDENTIALS", "")
