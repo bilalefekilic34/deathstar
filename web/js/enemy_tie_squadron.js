@@ -1,21 +1,20 @@
 /**
- * deathstarv2/web/js/dark_x_wing.js
+ * deathstarv2/web/js/enemy_tie_squadron.js
  * 
- * Multi-Agent Dark X-Wing Filo Yöneticisi & 1 HP Glass Cannon Çatışma Sistemi.
- * - Sketchfab Dark X-Wing referanslı GLTF modeli (/models/dark_x_wing.glb) GLTFLoader ile yüklenir.
- * - Her X-Wing arka plandaki kendi Drosophila (Meyve Sineği) SNN beyniyle yönlendirilir.
- * - Kokpit camının ardında kendi 3D sinek pilotu (200 Hz kanat çırpan Drosophila) yer alır.
- * - Uçuş Fiziği: TIE Fighter ile aynı (asimetrik kanat vuruş torku ΔΦ, Roll/Pitch/Yaw).
- * - Hedefleme: LC10a devresi öndeki TIE Fighter'a sürekli kilitlenir.
- * - Atış: Sinek menzile girdiğinde Proboscis Extension Reflex (PER) ile lazer salvosu ateşler (-z'den +z'ye).
- * - 1 HP Kuralı (Glass Cannon): Tek vuruşluk can; siper duvarına çarparsa veya TIE'nin
- *   Giant Fiber fıçı tonosu girdap şokuna yakalanırsa anında patlayarak (Particle System + Ses) sahneden silinir.
+ * Çoklu Düşman İmparatorluk TIE Fighter Filosu (Multi-Agent Imperial TIE Squadron).
+ * - Star Wars Lore: Siperde kahraman X-Wing'i arkadan kovalayan ve üzerine yeşil lazer sıkan İmparatorluk filosu.
+ * - SADECE GLTFLoader ile '/models/tie_fighter.glb' Sketchfab modeli yüklenir.
+ * - İlkel sahte geometriler (BoxGeometry, CylinderGeometry vs.) KESİNLİKLE İÇERMEZ.
+ * - Bounding Box: Yalnızca matematiksel çarpışma için görünmez THREE.Box3 kullanılır.
+ * - Şeffaf kokpiti içinde 3D Drosophila Melanogaster biyo-pilotu yer alır.
+ * - 1 HP Glass Cannon Kuralı: X-Wing lazeri, siper duvarı veya X-Wing fıçı tonosu girdabına yakalanırsa anında patlar.
+ * - PBR MeshPhysicalMaterial / MeshStandardMaterial ve envMap yansımaları içerir.
  */
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-export class DarkXWingManager {
+export class EnemyTieSquadron {
     constructor(scene, audioListener, onLaserFiredCallback, onEnemyDestroyedCallback) {
         this.scene = scene;
         this.audioListener = audioListener;
@@ -26,23 +25,27 @@ export class DarkXWingManager {
         this.masterTemplate = null;
         this.isModelReady = false;
 
-        // Aktif Düşman Birimleri: Map<agent_id, EnemyInstance>
+        // Aktif Düşman TIE Birimleri: Map<agent_id, EnemyInstance>
         this.activeEnemies = new Map();
 
-        // Patlama Parçacık Havuzu (Önceden Tahsis Edilmiş Bellek - Zero GC)
+        // Patlama Parçacık Havuzu (Önceden Tahsis Edilmiş - Zero GC)
         this.particlePool = [];
         this.maxPoolParticles = 60;
         this.debrisGroup = new THREE.Group();
+        this.debrisGroup.name = 'tie_explosion_debris';
         this.scene.add(this.debrisGroup);
         this.initParticlePool();
 
         // Patlama Ses Efekti (Web Audio Buffer)
         this.explosionSound = null;
         this.initExplosionSound();
+
+        // X-Wing Hitbox referansı
+        this.xWingBox = new THREE.Box3();
     }
 
     initParticlePool() {
-        const colorPalette = [0xff4500, 0xffa500, 0xffffff, 0x181c22, 0xea580c];
+        const colorPalette = [0x00ff88, 0x10b981, 0xffffff, 0x181c22, 0x475569];
         const sharedBoxGeo = new THREE.BoxGeometry(0.4, 0.2, 0.4);
         const sharedTetraGeo = new THREE.TetrahedronGeometry(0.35);
         const sharedMats = colorPalette.map(c => new THREE.MeshBasicMaterial({
@@ -77,11 +80,9 @@ export class DarkXWingManager {
             const buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
             const data = buffer.getChannelData(0);
 
-            // Zengin gök gürültüsü / metal parçalanma patlaması sentezi
             for (let i = 0; i < buffer.length; i++) {
                 const t = i / sampleRate;
                 const env = Math.exp(-t * 3.8);
-                // Düşük frekanslı rezonant patlama + beyaz gürültü + distorsiyon
                 const noise = (Math.random() * 2 - 1) * 0.7;
                 const boom = Math.sin(2 * Math.PI * (75 - t * 45) * t) * 0.6;
                 const snap = Math.sin(2 * Math.PI * 340 * t) * Math.exp(-t * 22.0) * 0.5;
@@ -92,94 +93,75 @@ export class DarkXWingManager {
             this.explosionSound.setBuffer(buffer);
             this.explosionSound.setVolume(1.0);
         } catch (err) {
-            console.warn('[DarkXWing] Ses sentezleme uyarısı:', err);
+            console.warn('[EnemyTieSquadron] Ses sentezleme uyarısı:', err);
         }
     }
 
     async init() {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             this.loader.load(
-                '/models/dark_x_wing.glb',
+                '/models/tie_fighter.glb',
                 (gltf) => {
                     this.masterTemplate = gltf.scene;
 
-                    // Yüksek Kalite PBR Malzeme İyileştirmeleri (Dark X-Wing Estetiği)
+                    // İmparatorluk TIE Fighter PBR Malzemeleri
                     this.masterTemplate.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
-                            const name = child.name.toLowerCase();
+                            const name = (child.name || '').toLowerCase();
 
+                            // 1. Şeffaf Kokpit Camı (Biyo-pilot sinek net görünsün)
                             if (name.includes('glass') || name.includes('canopy')) {
-                                // Şeffaf kokpit camı (içteki sinek pilot görünsün)
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0x93c5fd,
-                                    opacity: 0.28,
+                                    opacity: 0.22,
                                     transparent: true,
                                     roughness: 0.08,
-                                    metalness: 0.20,
+                                    metalness: 0.15,
                                     depthWrite: false
                                 });
-                            } else if (name.includes('stripe') || name.includes('intake') || name.includes('panel') || name.includes('ring')) {
-                                // Dark X-Wing İkonik Yarış Turuncusu (#ea580c)
+                            }
+                            // 2. Güneş Panelleri (Fotovoltaik siyah solar ızgaralar)
+                            else if ((name === 'left_wing' || name === 'right_wing') && !name.includes('strut') && !name.includes('rim') && !name.includes('hub')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xea580c,
-                                    emissive: 0xc2410c,
-                                    emissiveIntensity: 0.65,
-                                    roughness: 0.28,
-                                    metalness: 0.35
+                                    color: 0x11161d,
+                                    roughness: 0.58,
+                                    metalness: 0.28,
+                                    side: THREE.DoubleSide
                                 });
-                            } else if (name.includes('glow')) {
-                                // Yüksek İtişli İyon Egzoz Alevi (#ff4500)
+                            }
+                            // 3. İkiz İyon Motorları (Kırmızı İmparatorluk reaktör ışıması)
+                            else if (name.includes('engine') && !name.includes('block') && !name.includes('nozzle')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x330800,
-                                    emissive: 0xff4500,
-                                    emissiveIntensity: 4.0,
-                                    roughness: 0.15,
-                                    metalness: 0.80
-                                });
-                            } else if (name.includes('cannon') || name.includes('barrel') || name.includes('probe')) {
-                                // Taim & Bak KX9 Titanyum Silah Metali
-                                child.material = new THREE.MeshPhysicalMaterial({
-                                    color: 0x2d343f,
-                                    roughness: 0.22,
-                                    metalness: 0.90,
-                                    clearcoat: 0.35
-                                });
-                            } else if (name.includes('droid_head')) {
-                                // Astromech Droid Gümüş Kubbesi
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xd1d5db,
-                                    roughness: 0.18,
-                                    metalness: 0.88
-                                });
-                            } else if (name.includes('sensor_eye')) {
-                                // Kırmızı Droid Sensör Gözü
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xff0000,
+                                    color: 0x220000,
                                     emissive: 0xff1e1e,
-                                    emissiveIntensity: 3.0
+                                    emissiveIntensity: 3.5,
+                                    roughness: 0.20,
+                                    metalness: 0.85
                                 });
-                            } else {
-                                // Koyu Karbon/Titanyum Mat Gövde (#181c22)
+                            }
+                            // 4. Gövde & Kanat Pylonları (İmparatorluk Durasteel Gri/Mavi Çeliği)
+                            else {
                                 child.material = new THREE.MeshPhysicalMaterial({
-                                    color: 0x181c22,
-                                    roughness: 0.34,
+                                    color: 0x8a9ba8,
+                                    roughness: 0.25,
                                     metalness: 0.88,
-                                    clearcoat: 0.30,
-                                    clearcoatRoughness: 0.18
+                                    clearcoat: 0.35,
+                                    clearcoatRoughness: 0.18,
+                                    side: THREE.DoubleSide
                                 });
                             }
                         }
                     });
 
                     this.isModelReady = true;
-                    console.log('[DarkXWing] ✓ Dark X-Wing GLTF Modeli Başarıyla Yüklendi ve PBR Malzemelerle Hazırlandı!');
+                    console.log('[EnemyTieSquadron] ✓ Düşman TIE Fighter GLTF Modeli Başarıyla Yüklendi ve PBR Malzemelerle Hazırlandı!');
                     resolve();
                 },
                 undefined,
                 (err) => {
-                    console.error('[DarkXWing] GLTF yükleme hatası (/models/dark_x_wing.glb):', err);
+                    console.error('[EnemyTieSquadron] GLTF yükleme hatası (/models/tie_fighter.glb):', err);
                     reject(err);
                 }
             );
@@ -190,13 +172,13 @@ export class DarkXWingManager {
         if (!this.masterTemplate) return null;
 
         const group = new THREE.Group();
-        group.name = `enemy_${agentId}`;
+        group.name = `enemy_tie_${agentId}`;
 
         // GLTF Modelini derin kopyala (clone)
         const shipMesh = this.masterTemplate.clone(true);
         group.add(shipMesh);
 
-        // 3D Drosophila Sinek Pilotunu kokpit içine inşa et
+        // 3D Drosophila Sinek Pilotunu TIE kokpiti içine yerleştir
         const flyRig = this.buildFlyPilot(group);
 
         group.position.set(spawnData.x, spawnData.y, spawnData.z);
@@ -208,19 +190,20 @@ export class DarkXWingManager {
             flyRig: flyRig,
             hp: 1,
             isAlive: true,
-            lastZ: spawnData.z
+            lastZ: spawnData.z,
+            box: new THREE.Box3()
         };
 
         this.activeEnemies.set(agentId, instance);
-        console.log(`[DarkXWing] 👾 Sahneye Yeni Biyolojik Pilotlu X-Wing Eklendi: ${agentId}`);
+        console.log(`[EnemyTieSquadron] 👾 Sahneye Yeni Biyolojik Pilotlu Düşman TIE Fighter Eklendi: ${agentId}`);
         return instance;
     }
 
     buildFlyPilot(parentGroup) {
         const flyGroup = new THREE.Group();
-        // Kokpitin içi (Z: 0.8, Y: 0.55)
-        flyGroup.position.set(0, 0.48, 0.85);
-        flyGroup.scale.set(0.42, 0.42, 0.42);
+        // Kokpitin tam içi: TIE Fighter kokpit merkezi (Z: 0.0, Y: 0.0)
+        flyGroup.position.set(0, 0.0, 0.1);
+        flyGroup.scale.set(0.38, 0.38, 0.38);
 
         // 1. Toraks & Abdomen
         const thoraxGeo = new THREE.SphereGeometry(0.7, 12, 12);
@@ -301,8 +284,7 @@ export class DarkXWingManager {
         };
     }
 
-    triggerXWingExplosion(x, y, z, reason = 'hitbox_wall_crash') {
-        // 1. Havuzdan Parçacık Patlaması (Önceden Tahsis Edilmiş - Zero GC)
+    triggerTieExplosion(x, y, z, reason = 'hitbox_wall_crash') {
         let activated = 0;
         const targetCount = 30;
 
@@ -337,23 +319,22 @@ export class DarkXWingManager {
             }
         }
 
-        // 2. Ses Efekti Oynat
         if (this.explosionSound) {
             try {
                 if (this.explosionSound.isPlaying) this.explosionSound.stop();
                 this.explosionSound.play();
             } catch (err) {
-                console.warn('[DarkXWing] Patlama sesi hatası:', err);
+                console.warn('[EnemyTieSquadron] Patlama sesi hatası:', err);
             }
         }
 
-        console.log(`[DarkXWing] 💥 1 HP KURALI: X-Wing Patlatıldı (${reason})! Konum: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
+        console.log(`[EnemyTieSquadron] 💥 1 HP KURALI: Düşman TIE Fighter Patlatıldı (${reason})! Konum: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
     }
 
-    update(dt, enemiesTelemetry, tiePos, isTieBarrelRolling) {
+    update(dt, enemiesTelemetry, heroPos, isHeroBarrelRolling) {
         if (!this.isModelReady) return;
 
-        // A. Havuzlanmış Parçacık Sistemini Güncelle (Zero GC)
+        // A. Havuzlanmış Parçacık Sistemini Güncelle
         for (let i = 0; i < this.particlePool.length; i++) {
             const p = this.particlePool[i];
             if (p.active) {
@@ -372,14 +353,13 @@ export class DarkXWingManager {
             }
         }
 
-        // B. Telemetri ile X-Wing Birimlerini Senkronize Et
+        // B. Telemetri ile Düşman TIE Birimlerini Senkronize Et
         if (!enemiesTelemetry || !Array.isArray(enemiesTelemetry)) return;
 
-        // TIE Fighter Bounding Box (Kabin + devasa dikey altıgen güneş panelleri: W: 8.5m, H: 8.8m, D: 7.2m)
-        if (!this.tieBox) this.tieBox = new THREE.Box3();
-        this.tieBox.setFromCenterAndSize(
-            new THREE.Vector3(tiePos.x, tiePos.y, tiePos.z),
-            new THREE.Vector3(8.5, 8.8, 7.2)
+        // Kahraman X-Wing Bounding Box (Görünmez matematiksel Box3: W: 11.8m, H: 3.2m, D: 12.2m)
+        this.xWingBox.setFromCenterAndSize(
+            new THREE.Vector3(heroPos.x, heroPos.y, heroPos.z),
+            new THREE.Vector3(11.8, 3.2, 12.2)
         );
 
         const currentTelemetryIds = new Set();
@@ -390,7 +370,6 @@ export class DarkXWingManager {
 
             let instance = this.activeEnemies.get(agentId);
             if (!instance) {
-                // Sahneye yeni X-Wing spawn et
                 instance = this.createEnemyInstance(agentId, enemyData);
                 if (!instance) continue;
             }
@@ -399,44 +378,40 @@ export class DarkXWingManager {
             const ey = enemyData.y;
             const ez = enemyData.z;
 
-            // Konum ve 6-DoF Rotasyon (Önce pozisyon ve rotasyonu güncelle)
+            // Konum ve 6-DoF Rotasyon
             instance.group.position.set(ex, ey, ez);
             instance.group.rotation.z = -enemyData.roll;   // Roll
             instance.group.rotation.x = -enemyData.pitch;  // Pitch
             instance.group.rotation.y = -enemyData.yaw;    // Yaw
             instance.lastZ = ez;
 
-            // X-Wing Bounding Box (Kanat açıklığı ~11.8m, dikey yükseklik ~3.2m, uzunluk ~12.2m)
-            if (!instance.box) instance.box = new THREE.Box3();
+            // TIE Fighter Bounding Box (Görünmez matematiksel Box3: W: 8.5m, H: 8.8m, D: 7.2m)
             instance.box.setFromCenterAndSize(
                 instance.group.position,
-                new THREE.Vector3(11.8, 3.2, 12.2)
+                new THREE.Vector3(8.5, 8.8, 7.2)
             );
 
             // 1. Siper Duvarı Hitbox Kontrolü: |X| >= 34.0, Y <= 5.0, Y >= 78.0
             const isWallHit = (Math.abs(ex) >= 34.0 || ey <= 5.0 || ey >= 78.0);
 
-            // 2. Fiziksel Box3 Çarpışma Tespiti (TIE Fighter Box3 ile X-Wing Box3 Kesişimi)
-            const isBoxIntersect = this.tieBox.intersectsBox(instance.box);
+            // 2. Fiziksel Box3 Çarpışma Tespiti (X-Wing Box3 ile TIE Fighter Box3 Kesişimi)
+            const isBoxIntersect = this.xWingBox.intersectsBox(instance.box);
 
-            // 3. TIE Fighter Giant Fiber Fıçı Tonosu Girdap Şoku:
-            // TIE Fighter fıçı tonosu yaparken arkasındaki yüksek enerjili plazma girdabı
-            // 28 metre yakınındaki veya Box3 temasındaki 1 HP X-Wing'i anında savurup parçalar!
-            const dx = tiePos.x - ex;
-            const dy = tiePos.y - ey;
-            const dz = tiePos.z - ez;
-            const distToTie = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            const isBarrelRollWakeHit = isTieBarrelRolling && (distToTie < 28.0 || isBoxIntersect);
+            // 3. X-Wing Giant Fiber Fıçı Tonosu Girdap Şoku:
+            const dx = heroPos.x - ex;
+            const dy = heroPos.y - ey;
+            const dz = heroPos.z - ez;
+            const distToHero = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const isBarrelRollWakeHit = isHeroBarrelRolling && (distToHero < 28.0 || isBoxIntersect);
 
-            // 4. Doğrudan Gövde Çarpışması (Fıçı tonosu yapılmıyorsa ve Box3 kesiştiyse)
-            const isPhysicalCollision = isBoxIntersect && !isTieBarrelRolling;
+            // 4. Doğrudan Gövde Çarpışması
+            const isPhysicalCollision = isBoxIntersect && !isHeroBarrelRolling;
 
             if ((isWallHit || isBarrelRollWakeHit || isPhysicalCollision || !enemyData.is_alive) && instance.isAlive) {
                 instance.isAlive = false;
-                const reason = isPhysicalCollision ? 'tie_physical_collision' : (isBarrelRollWakeHit ? 'tie_barrel_roll_wake' : (isWallHit ? 'trench_wall_crash' : 'server_destroyed'));
-                this.triggerXWingExplosion(ex, ey, ez, reason);
+                const reason = isPhysicalCollision ? 'xwing_physical_collision' : (isBarrelRollWakeHit ? 'xwing_barrel_roll_wake' : (isWallHit ? 'trench_wall_crash' : 'server_destroyed'));
+                this.triggerTieExplosion(ex, ey, ez, reason);
 
-                // Sunucuya ve ana uygulamaya imha bildirimini ilet
                 if (this.onEnemyDestroyedCallback) {
                     this.onEnemyDestroyedCallback(agentId, reason);
                 }
@@ -448,70 +423,34 @@ export class DarkXWingManager {
 
             // 200 Hz Sinek Kanat Çırpma & Asimetri
             if (instance.flyRig) {
-                instance.flyRig.leftPivot.rotation.z = enemyData.wing_l;
-                instance.flyRig.rightPivot.rotation.z = -enemyData.wing_r;
+                const wingFreq = 200.0;
+                const t = performance.now() * 0.001;
+                const baseStroke = Math.sin(t * wingFreq * 0.06) * 0.45;
+                const deltaPhi = (enemyData.delta_phi || 0.0) * 0.008;
+
+                instance.flyRig.leftPivot.rotation.z = baseStroke + deltaPhi;
+                instance.flyRig.rightPivot.rotation.z = -baseStroke + deltaPhi;
             }
 
-            // PER Lazer Ateşleme Refleksi (-z'den +z'ye, öndeki TIE Fighter'a)
-            // YALNIZCA X-Wing TIE Fighter'ın arkasındayken ateş açar (dz > 4.0m)
-            if (enemyData.fire_laser && this.onLaserFiredCallback && dz > 4.0) {
-                // 4 Kanat ucundan (+Z ileri yönünde) yeşil plazma lazer salvosu
-                const cannonOffsets = [
-                    [-6.1,  1.8], // Üst-Sol
-                    [-6.1, -1.8], // Alt-Sol
-                    [ 6.1,  1.8], // Üst-Sağ
-                    [ 6.1, -1.8], // Alt-Sağ
-                ];
+            // Sinek Göz Rengi (LC10a Av/Takip Uyarımı)
+            const lc10a = enemyData.v_lc10a || -70.0;
+            const normalizedExcitation = Math.min(1.0, Math.max(0.0, (lc10a + 70.0) / 45.0));
 
-                for (const [cx, cy] of cannonOffsets) {
-                    // X-Wing'in rotasyonuna göre namlu uç noktalarını hesapla
-                    const localTip = new THREE.Vector3(cx, cy, 5.2);
-                    localTip.applyEuler(instance.group.rotation);
-                    const spawnPos = instance.group.position.clone().add(localTip);
-
-                    // Lazer hızı: Kesinlikle -z'den +z'ye doğru (+130 m/s)
-                    const laserSpeed = 135.0;
-                    this.onLaserFiredCallback(spawnPos, laserSpeed, agentId);
+            // PER (Proboscis Extension Reflex) Lazer Atışı:
+            if (enemyData.fire_laser) {
+                if (this.onLaserFiredCallback) {
+                    const spawnPos = new THREE.Vector3(ex, ey, ez + 2.0);
+                    this.onLaserFiredCallback(spawnPos, 160.0, agentId);
                 }
             }
         }
 
-        // Telemetriden silinmiş eski düşmanları temizle
-        for (const [id, instance] of this.activeEnemies.entries()) {
+        // Sunucuda artık olmayan birimleri temizle
+        for (const [id, inst] of this.activeEnemies.entries()) {
             if (!currentTelemetryIds.has(id)) {
-                this.scene.remove(instance.group);
+                this.scene.remove(inst.group);
                 this.activeEnemies.delete(id);
             }
-        }
-    }
-
-    destroyEnemy(agentId, reason = 'tie_laser_hit') {
-        const instance = this.activeEnemies.get(agentId);
-        if (instance && instance.isAlive) {
-            instance.isAlive = false;
-            const ex = instance.group.position.x;
-            const ey = instance.group.position.y;
-            const ez = instance.group.position.z;
-            this.triggerXWingExplosion(ex, ey, ez, reason);
-            if (this.onEnemyDestroyedCallback) {
-                this.onEnemyDestroyedCallback(agentId, reason);
-            }
-            this.scene.remove(instance.group);
-            this.activeEnemies.delete(agentId);
-            return true;
-        }
-        return false;
-    }
-
-    reset() {
-        for (const [, instance] of this.activeEnemies.entries()) {
-            this.scene.remove(instance.group);
-        }
-        this.activeEnemies.clear();
-
-        for (const p of this.particlePool) {
-            p.active = false;
-            p.mesh.visible = false;
         }
     }
 }

@@ -138,17 +138,17 @@ async def websocket_endpoint(websocket: WebSocket):
                     agent_id = data.get("id", "")
                     reason = data.get("reason", "wall_crash")
                     squadron.on_enemy_hit_or_crashed(agent_id, reason)
-                    if reason == "tie_laser_hit":
+                    if reason in ("xwing_laser_hit", "tie_laser_hit"):
                         brain.inject_dopamine(25.0)
-                        print(f"[WebSocket] 🎯 TIE Fighter Lazer İsabeti! {agent_id} imha edildi! +25 mV Dopamin!")
-                    elif reason == "tie_physical_collision":
+                        print(f"[WebSocket] 🎯 X-Wing Lazer İsabeti! {agent_id} (Düşman TIE Fighter) imha edildi! +25 mV Dopamin!")
+                    elif reason in ("xwing_physical_collision", "tie_physical_collision"):
                         brain.on_laser_hit()
-                        print(f"[WebSocket] 💥 TIE Fighter X-Wing ile ÇARPIŞTI! {agent_id} patladı! Hasar/Ceza uygulandı!")
+                        print(f"[WebSocket] 💥 Kahraman X-Wing Düşman TIE Fighter ile ÇARPIŞTI! {agent_id} patladı! Hasar/Ceza uygulandı!")
 
                 elif msg_type == "enemy_laser_hit":
-                    # X-Wing'in lazeri TIE Fighter'a isabet etti: Biyolojik stres & ceza
+                    # Düşman TIE Fighter'ın yeşil lazeri Kahraman X-Wing'e isabet etti: Biyolojik stres & ceza
                     brain.on_laser_hit()
-                    print("[WebSocket] 💥 TIE Fighter X-Wing Lazeriyle Vuruldu!")
+                    print("[WebSocket] 💥 Kahraman X-Wing Düşman TIE Fighter Lazeriyle Vuruldu!")
 
                 elif msg_type == "exhaust_entered":
                     # Egzoz çukuruna ulaşıldı! +40 mV Dopamin & +100 Plastisite
@@ -166,6 +166,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Proton Torpidoları Egzoz Deliğini Vurdu: Devasa Ölüm Yıldızı Patlaması!
                     brain.on_death_star_destroyed()
                     print("[WebSocket] 💥 SÜPERNOVA: Proton Torpidoları Egzoz Deliğini Vurdu! Ölüm Yıldızı Patlatıldı! +100 mV Dopamin!")
+
+                elif msg_type == "reset_game":
+                    ship_state["x"] = 0.0
+                    ship_state["y"] = 32.0
+                    ship_state["z"] = 0.0
+                    ship_state["vx"] = 0.0
+                    ship_state["vy"] = 0.0
+                    ship_state["vz"] = 35.0
+                    ship_state["roll"] = 0.0
+                    ship_state["pitch"] = 0.0
+                    ship_state["yaw"] = 0.0
+                    brain.reset_proboscis()
+                    squadron.reset()
+                    print("[WebSocket] 🔄 Oyun ve TIE Fighter Z=0 konumuna sıfırlandı!")
 
                 elif msg_type == "reset_proboscis":
                     brain.reset_proboscis()

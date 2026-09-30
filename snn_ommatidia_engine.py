@@ -1043,7 +1043,7 @@ class EnemySquadronManager:
         self.spawn_timer = 0.0
 
     def spawn_enemy(self, tie_state):
-        agent_id = f"xwing_{self.next_agent_num}"
+        agent_id = f"tie_{self.next_agent_num}"
         self.next_agent_num += 1
         
         # TIE Fighter'ın gerisinde reaksiyon payı tanıyacak mesafede spawn:

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Pigeon / Death Star v2: Biyolojik Sinek Pilotlu TIE Fighter</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=2.1">
+    <title>Project Pigeon / Death Star v2: Biyolojik Sinek Pilotlu Kahraman X-Wing</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=3.0">
     
     <!-- Three.js ve Eklentileri İçin Import Map -->
     <script type="importmap">
@@ -26,7 +26,7 @@
         <div class="top-bar">
             <div class="title-card interactive">
                 <h1>PROJECT PIGEON / DEATH STAR v2</h1>
-                <p>Nöro-Biyolojik Uzay Gemisi: Sinek Beyni (Drosophila Melanogaster) Kontrollü TIE Fighter</p>
+                <p>Nöro-Biyolojik Uzay Gemisi: Sinek Beyni (Drosophila) Kontrollü Kahraman X-Wing (Red Five)</p>
             </div>
 
             <div class="neuprint-badge interactive" id="neuprint-badge">
@@ -38,7 +38,7 @@
 
         <!-- 3D Mini Nöral Hologram Penceresi -->
         <div id="hologram-container" class="interactive">
-            <div id="hologram-label">CANLI KONEKTOM HOLOGRAMI</div>
+            <div id="hologram-label">3D SİNEK BEYNİ (DROSOPHILA)</div>
         </div>
 
         <!-- 1 Dakika Hayatta Kalma Sayacı & Ölüm Yıldızı Yaklaşım Barı -->
@@ -68,7 +68,7 @@
             <div class="crosshair" id="hud-crosshair"></div>
         </div>
 
-        <!-- Alt Bilgilendirme Bannerları (Fighter Görüşünü Kapatmayacak Şekilde Aşağı Taşındı) -->
+        <!-- Alt Bilgilendirme Bannerları -->
         <div class="alert-container">
             <div class="alert-banner alert-barrel-roll" id="banner-barrel-roll">
                 ⚡ GIANT FIBER (DNp01) TETİKLENDİ: 360° FIÇI TONOSU (BARREL ROLL)!
@@ -85,23 +85,23 @@
             <div class="alert-banner alert-proboscis" id="banner-proboscis" style="display: none;">
                 👅 PROBOSCIS REFLEKSİ (PER): SİNEK HORTUMUYLA BESİNE HAMLE YAPTI -> PROTON TORPİDOLARI ATEŞLENDİ!
             </div>
-            <div class="alert-banner" id="banner-xwing-threat" style="display: none; background: rgba(234, 88, 12, 0.25); border-color: #ea580c; color: #ffedd5; box-shadow: 0 0 25px rgba(234, 88, 12, 0.5);">
-                ⚠️ DÜŞMAN DARK X-WING ARKADAN YAKLAŞIYOR! (SİNEK BEYNİ LC10a KİLİTLENDİ - 1 HP)!
+            <div class="alert-banner" id="banner-xwing-threat" style="display: none; background: rgba(16, 185, 129, 0.25); border-color: #10b981; color: #d1fae5; box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);">
+                ⚠️ DÜŞMAN TIE FIGHTER ARKADAN YAKLAŞIYOR! (SİNEK BEYNİ LC10a KİLİTLENDİ - 1 HP)!
             </div>
             <div class="alert-banner" id="banner-xwing-overtake" style="display: none; background: rgba(239, 68, 68, 0.35); border-color: #ef4444; color: #fee2e2; box-shadow: 0 0 30px rgba(239, 68, 68, 0.7);">
-                🚨 TEHLİKE: X-WING ÖNÜNE GEÇTİ! LOOMING ÇARPIŞMA ENGELİ — MANEVRA YAP!
+                🚨 TEHLİKE: TIE FIGHTER ÖNÜNE GEÇTİ! LOOMING ÇARPIŞMA ENGELİ — MANEVRA YAP!
             </div>
             <div class="alert-banner" id="banner-weapons-locked" style="display: none; background: rgba(245, 158, 11, 0.3); border-color: #f59e0b; color: #fef3c7; box-shadow: 0 0 25px rgba(245, 158, 11, 0.5);">
-                🔒 [SİLAH KİLİTLİ] TIE Fighter Pasif Av Modunda! X-Wing'lere Karşı Silah Yoktur — Yalnızca Kaçış ve Savunma!
+                🔒 [SİLAH KİLİTLİ] Kahraman X-Wing Hedef Takip Modunda!
             </div>
             <div class="alert-banner" id="banner-xwing-destroyed" style="display: none; background: rgba(34, 197, 94, 0.25); border-color: #22c55e; color: #dcfce7; box-shadow: 0 0 25px rgba(34, 197, 94, 0.5);">
-                💥 1 HP KURALI: DÜŞMAN X-WING İMHA EDİLDİ! (DUVAR ÇARPIŞMASI / FIÇI TONOSU GİRDABI)
+                💥 1 HP KURALI: DÜŞMAN TIE FIGHTER İMHA EDİLDİ! (DUVAR ÇARPIŞMASI / FIÇI TONOSU GİRDABI)
             </div>
             <div class="alert-banner alert-victory" id="banner-victory" style="display: none;">
                 🏆 ÖLÜM YILDIZI İMHA EDİLDİ! REAKTÖR ÇÖKTÜ! NİHAİ DOPAMİN PATLAMASI (+100 mV)!
             </div>
             <div class="alert-banner alert-barrel-roll" id="banner-game-over" style="display: none;">
-                💀 TIE FIGHTER DÜŞÜRÜLDÜ - SİNEK ETKİSİZ HALE GELDİ (Yeniden Başlat: 'R')
+                💀 X-WING DÜŞÜRÜLDÜ - SİNEK ETKİSİZ HALE GELDİ (Yeniden Başlat: 'R')
                 <div style="margin-top: 10px;">
                     <button class="hud-btn interactive" id="btn-restart">YENİDEN BAŞLAT</button>
                 </div>
@@ -111,7 +111,7 @@
         <!-- Alt Telemetri Panelleri -->
         <div class="hud-panels">
             <!-- Sol Panel: Biyolojik Nöro-Motor Sistem -->
-            <div class="panel interactive">
+            <div class="panel interactive" id="panel-neural-telemetry">
                 <div class="panel-title">
                     <span>NÖRO-MOTOR BİYOLOJİK TELEMETRİ</span>
                     <span style="color: #00ff66;">200 Hz</span>
@@ -140,9 +140,9 @@
                     <span>Proboscis (PER) Refleksi:</span>
                     <span class="telemetry-val" id="val-proboscis" style="color: #ff00aa;">HAZIR (-70.0 mV)</span>
                 </div>
-                <div class="telemetry-row" style="margin-top: 4px; border-top: 1px dashed rgba(234,88,12,0.4); padding-top: 4px;">
-                    <span>Düşman Dark X-Wing (SNN):</span>
-                    <span class="telemetry-val" id="val-xwing-status" style="color: #ea580c;">0 Takipçi (1 HP)</span>
+                <div class="telemetry-row" style="margin-top: 4px; border-top: 1px dashed rgba(16,185,129,0.4); padding-top: 4px;">
+                    <span>Düşman TIE Fighter (SNN):</span>
+                    <span class="telemetry-val" id="val-xwing-status" style="color: #10b981;">0 Takipçi (1 HP)</span>
                 </div>
             </div>
 
@@ -180,7 +180,7 @@
             <!-- Sağ Panel: Gemi & Görev Kontrol -->
             <div class="panel interactive">
                 <div class="panel-title">
-                    <span>TIE FIGHTER & GÖREV KONTROL</span>
+                    <span>X-WING (RED FIVE) & GÖREV KONTROL</span>
                     <span style="color: #ffb700;">PAM ÖDÜL DÖNGÜSÜ</span>
                 </div>
                 <div class="telemetry-row">
@@ -205,13 +205,15 @@
                     <button class="hud-btn" id="btn-cam-cockpit" title="Şeffaf Kokpitteki Sineğe Yakın Çekim (Tuş: 2)">2. SİNEK KOKPİT</button>
                     <button class="hud-btn" id="btn-cam-pilot" title="Sineğin Gözünden Kokpit İçi (Tuş: 3)">3. PİLOT POV</button>
                     <button class="hud-btn" id="btn-cam-deathstar" title="Ölüm Yıldızı 3D Modeli Gözlem (Tuş: 4)">4. ÖLÜM YILDIZI</button>
-                    <button class="hud-btn" id="btn-cam-enemy" title="Düşman Dark X-Wing Takip Kamerası (Tuş: 5)">5. DÜŞMAN X-WING</button>
+                    <button class="hud-btn" id="btn-cam-enemy" title="Düşman TIE Fighter Takip Kamerası (Tuş: 5)">5. DÜŞMAN TIE</button>
                 </div>
 
                 <div class="camera-controls" style="margin-top: 6px;">
                     <button class="hud-btn hud-btn-finale" id="btn-finale" title="Ölüm Yıldızı Egzoz Deliği Final Koşusunu Başlat (Tuş: F)">🎯 FİNALİ BAŞLAT (F)</button>
                     <button class="hud-btn hud-btn-dopamine" id="btn-dopamine" title="Mushroom Body'ye +40 mV Dopamin Ver (Tuş: D)">🌟 DOPAMİN (+40mV)</button>
-                    <button class="hud-btn hud-btn-laser" id="btn-laser" title="TIE Fighter İkiz Lazerlerini Ateşle (Tuş: L)" style="border-color: #00ff88; color: #00ff88;">⚡ İKİZ LAZER (L)</button>
+                    <button class="hud-btn hud-btn-laser" id="btn-laser" title="X-Wing Dörtlü Plazma Lazerlerini Ateşle (Tuş: L)" style="border-color: #ef4444; color: #ef4444;">⚡ X-WING LAZER (L)</button>
+                    <button class="hud-btn hud-btn-rec" id="btn-record" title="60 FPS WebM Video Kaydı Başlat/Durdur (Tuş: V)" style="border-color: #ef4444; color: #ef4444;">🔴 VİDEO KAYIT (V)</button>
+                    <button class="hud-btn hud-btn-director" id="btn-director" title="Star Wars: A New Hope Siper Koşusu Yönetmen Modu (Tuş: M)">🎬 YÖNETMEN MODU (M)</button>
                 </div>
             </div>
         </div>
@@ -259,6 +261,6 @@
     </div>
 
     <!-- Uygulama Modülü -->
-    <script type="module" src="/static/js/main.js?v=7.2"></script>
+    <script type="module" src="/static/js/main.js?v=9.0"></script>
 </body>
 </html>

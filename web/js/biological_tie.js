@@ -104,31 +104,8 @@ export class BiologicalTieFighter {
                 },
                 undefined,
                 (err) => {
-                    console.warn('[TIE Fighter] GLTF yükleme uyarısı, prosedürel TIE Fighter kuruluyor:', err);
-                    const fallbackGroup = new THREE.Group();
-                    const cockpitGeo = new THREE.SphereGeometry(2.0, 16, 16);
-                    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x505c6d, roughness: 0.16, metalness: 0.94 });
-                    fallbackGroup.add(new THREE.Mesh(cockpitGeo, cockpitMat));
-
-                    const pylonGeo = new THREE.CylinderGeometry(0.3, 0.3, 8.0, 12);
-                    pylonGeo.rotateZ(Math.PI / 2);
-                    fallbackGroup.add(new THREE.Mesh(pylonGeo, cockpitMat));
-
-                    const wingGeo = new THREE.CylinderGeometry(4.2, 4.2, 0.2, 6);
-                    wingGeo.rotateZ(Math.PI / 2);
-                    const wingMat = new THREE.MeshStandardMaterial({ color: 0x242b35, roughness: 0.20, metalness: 0.90 });
-                    const leftWing = new THREE.Mesh(wingGeo, wingMat);
-                    leftWing.position.set(-4.0, 0, 0);
-                    const rightWing = new THREE.Mesh(wingGeo, wingMat);
-                    rightWing.position.set(4.0, 0, 0);
-                    fallbackGroup.add(leftWing);
-                    fallbackGroup.add(rightWing);
-
-                    this.tieMesh = fallbackGroup;
-                    this.shipGroup.add(this.tieMesh);
-                    this.buildFlyPilot();
-                    this.isLoaded = true;
-                    resolve();
+                    console.error('[TIE Fighter] GLTF yükleme hatası (/models/tie_fighter.glb):', err);
+                    reject(err);
                 }
             );
         });

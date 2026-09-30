@@ -43,55 +43,47 @@ export class ExhaustPort {
     }
 
     async init() {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const onModelReady = (model) => {
                 this.portMesh = model;
-                
-                // Imperial Egzoz Portu mimarisi:
-                // Siyah düz bir silindir yerine, TIE Fighter'a bakan yüksek teknolojili
-                // plazma kalkan halkalı, parlayan reaktör çekirdekli ve zırhlı blast bileziği oluşturulur.
-                const collarGeo = new THREE.CylinderGeometry(8.5, 9.2, 14.0, 32, 1, true);
-                collarGeo.rotateX(Math.PI / 2);
-                const collarMat = new THREE.MeshStandardMaterial({
-                    color: 0x242e3d,
-                    metalness: 0.85,
-                    roughness: 0.35,
-                    side: THREE.DoubleSide
-                });
-                const collar = new THREE.Mesh(collarGeo, collarMat);
-                collar.castShadow = true;
-                collar.receiveShadow = true;
-                this.group.add(collar);
 
-                // Port Ağzı Titanyum Çerçeve Bileziği
-                const rimGeo = new THREE.TorusGeometry(8.6, 0.7, 16, 32);
-                const rimMat = new THREE.MeshStandardMaterial({
-                    color: 0x141a24,
-                    metalness: 0.9,
-                    roughness: 0.2
-                });
-                const rim = new THREE.Mesh(rimGeo, rimMat);
-                rim.position.set(0, 0, -6.0);
-                this.group.add(rim);
+                // GLTF modelindeki PBR materyalleri yapılandır
+                this.portMesh.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        const name = (child.name || '').toLowerCase();
 
-                // Neon Ray-Shield Tehlike Işık Halkası
-                const hazardGeo = new THREE.TorusGeometry(8.2, 0.22, 8, 32);
-                const hazardMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
-                const hazardRing = new THREE.Mesh(hazardGeo, hazardMat);
-                hazardRing.position.set(0, 0, -6.1);
-                this.group.add(hazardRing);
-
-                // Işıyan Termonükleer Reaktör Çekirdeği
-                const coreGeo = new THREE.SphereGeometry(3.8, 24, 24);
-                const coreMat = new THREE.MeshStandardMaterial({
-                    color: 0xffaa00,
-                    emissive: 0xff6600,
-                    emissiveIntensity: 3.5,
-                    roughness: 0.1
+                        if (name.includes('core') || name.includes('reactor')) {
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: 0xffaa00,
+                                emissive: 0xff6600,
+                                emissiveIntensity: 3.5,
+                                roughness: 0.15,
+                                metalness: 0.5
+                            });
+                            this.coreMesh = child;
+                        } else if (name.includes('ring') || name.includes('shield')) {
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: 0x00f0ff,
+                                emissive: 0x00c8ff,
+                                emissiveIntensity: 2.2,
+                                roughness: 0.2,
+                                metalness: 0.8
+                            });
+                        } else {
+                            // Gövde ve tünel boğazı (İmparatorluk Durasteel Çeliği)
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: 0x242e3d,
+                                metalness: 0.88,
+                                roughness: 0.35,
+                                envMapIntensity: 1.6
+                            });
+                        }
+                    }
                 });
-                this.coreMesh = new THREE.Mesh(coreGeo, coreMat);
-                this.coreMesh.position.set(0, 0, -2.0);
-                this.group.add(this.coreMesh);
+
+                this.group.add(this.portMesh);
 
                 // Reaktör Çekirdek Işığı
                 this.coreLight = new THREE.PointLight(0xff9900, 4.0, 55);
@@ -112,7 +104,7 @@ export class ExhaustPort {
                 this.updateCollisionBox();
 
                 this.isLoaded = true;
-                console.log('[Exhaust Port] ✓ Yüksek Detaylı Termal Egzoz Portu ve Plazma Halkaları Hazırlandı!');
+                console.log('[Exhaust Port] ✓ GLTF Termal Egzoz Portu Modeli ve PBR Malzemeler Hazırlandı!');
                 resolve();
             };
 
@@ -123,8 +115,8 @@ export class ExhaustPort {
                 },
                 undefined,
                 (err) => {
-                    console.warn('[Exhaust Port] Model yükleme uyarısı, prosedürel port ile devam:', err);
-                    onModelReady(new THREE.Group());
+                    console.error('[Exhaust Port] GLTF yükleme hatası (/models/exhaust_port.glb):', err);
+                    reject(err);
                 }
             );
         });

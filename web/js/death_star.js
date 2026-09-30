@@ -101,37 +101,7 @@ export class DeathStarStation {
                 resolve();
             };
 
-            const buildProceduralFallback = () => {
-                console.warn('[DeathStar] GLTF yüklenemedi veya gecikti, prosedürel İmparatorluk İstasyonu oluşturuluyor...');
-                const fallbackGroup = new THREE.Group();
-                const sphereGeo = new THREE.SphereGeometry(36.0, 32, 32);
-                const sphereMat = new THREE.MeshStandardMaterial({
-                    color: 0x90a0b5,
-                    roughness: 0.5,
-                    metalness: 0.4,
-                    fog: false
-                });
-                const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-                fallbackGroup.add(sphereMesh);
 
-                // Süper Lazer Çanağı
-                const dishGeo = new THREE.SphereGeometry(10.0, 24, 24, 0, Math.PI * 2, 0, Math.PI / 4);
-                const dishMat = new THREE.MeshStandardMaterial({ color: 0x556070, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide });
-                const dishMesh = new THREE.Mesh(dishGeo, dishMat);
-                dishMesh.position.set(16.0, 16.0, 24.0);
-                dishMesh.rotation.x = Math.PI;
-                fallbackGroup.add(dishMesh);
-
-                // Emitter
-                const emitterGeo = new THREE.SphereGeometry(2.0, 16, 16);
-                const emitterMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, fog: false });
-                this.emitterGlow = new THREE.Mesh(emitterGeo, emitterMat);
-                this.emitterGlow.position.set(16.0, 16.0, 26.0);
-                fallbackGroup.add(this.emitterGlow);
-
-                fallbackGroup.scale.set(6.0, 6.0, 6.0);
-                setupDeathStarModel(fallbackGroup);
-            };
 
             // Yüksek Çözünürlüklü İmparatorluk Ölüm Yıldızı Zırh Dokusu
             const texture = this.textureLoader.load(
@@ -217,8 +187,7 @@ export class DeathStarStation {
                 },
                 undefined,
                 (err) => {
-                    console.warn('[DeathStar] GLTF yükleme hatası yakalandı, fallback devreye giriyor:', err);
-                    buildProceduralFallback();
+                    console.error('[DeathStar] GLTF yükleme hatası (/models/death_star.glb):', err);
                 }
             );
         });
