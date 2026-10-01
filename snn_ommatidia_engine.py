@@ -15,7 +15,12 @@ Bileşenler:
 
 import math
 import time
+import warnings
+import concurrent.futures
 import numpy as np
+
+# Bağımlılık sürüm uyarılarını sessize al
+warnings.filterwarnings("ignore")
 
 # API KEY IMPORT
 try:
@@ -292,21 +297,27 @@ class DrosophilaSNNBrain:
         Janelia Neuprint (male-cns:v1.0) üzerinden veya yerel biyolojik doğrulanmış
         konektom veritabanından LC10a, DNp01, PAM ve MBON nöronlarını başlatır.
         """
-        print("[SNN] Janelia Neuprint (male-cns:v1.0) devresi yükleniyor...")
+        print("[SNN] Janelia Neuprint (male-cns:v1.0) biyolojik konektom devresi yükleniyor...")
         neurons = []
         synapses = []
         status = "Referans FlyWire / Neuprint Biyolojik Modeli"
         
         if NEUPRINT_AVAILABLE and YOUR_API_KEY:
+            def _fetch_neuprint():
+                c = Client("https://neuprint.janelia.org", dataset='male-cns:v1.0', token=YOUR_API_KEY, progress=False)
+                return fetch_adjacencies(sources=['LC10a'], targets=['DNp01'], client=c)
+
             try:
-                client = Client("https://neuprint.janelia.org", dataset='male-cns:v1.0', token=YOUR_API_KEY)
-                # LC10a ve DNp01 sorgusu
-                n_df, c_df = fetch_adjacencies(sources=['LC10a'], targets=['DNp01'], client=client)
-                if len(n_df) > 0:
-                    status = "Janelia Neuprint (male-cns:v1.0) CANLI BAĞLANTI"
-                    print(f"[SNN] ✓ Neuprint API'den {len(n_df)} nöron çekildi!")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_fetch_neuprint)
+                    n_df, c_df = future.result(timeout=3.5)
+                    if len(n_df) > 0:
+                        status = "Janelia Neuprint (male-cns:v1.0) CANLI BAĞLANTI"
+                        print(f"[SNN] ✓ Neuprint API'den {len(n_df)} nöron başarıyla çekildi!")
+            except concurrent.futures.TimeoutError:
+                print("[SNN] ℹ Neuprint API yanıtı (3.5s) zaman aşımına uğradı. Biyolojik kalibreli yerel Janelia konektomu aktif.")
             except Exception as e:
-                print(f"[SNN] Neuprint API uyarısı ({e}). Biyolojik kalibreli yerel Janelia konektomu aktif.")
+                print(f"[SNN] ℹ Neuprint API ({e}). Biyolojik kalibreli yerel Janelia konektomu aktif.")
 
         # Biyolojik Janelia male-cns:v1.0 ID'leri
         # LC10a (Lobula Columnar - Küçük Hedef Takibi): 10 adet temsilci
