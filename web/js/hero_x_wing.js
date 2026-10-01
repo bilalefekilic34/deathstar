@@ -29,6 +29,9 @@ export class HeroXWing {
         this.rightWingMesh = null;
         this.isLoaded = false;
 
+        // Canlılık / Hayatta Kalma Durumu
+        this.isAlive = true;
+
         // Hasar ve Biyolojik Stres Göstergeleri
         this.damageFlashTimer = 0.0;
         this.originalMaterials = new Map();
@@ -39,6 +42,13 @@ export class HeroXWing {
 
         // Motor İtiş Işıkları
         this.engineLights = [];
+
+        // X-Wing İmha / Patlama Parçacık Sistemi (Zero GC)
+        this.debrisGroup = new THREE.Group();
+        this.debrisGroup.name = 'hero_x_wing_debris';
+        this.scene.add(this.debrisGroup);
+        this.explosionParticles = [];
+        this.initExplosionParticles();
     }
 
     async init() {
@@ -229,6 +239,75 @@ export class HeroXWing {
         this.rightWingPivot = rightPivot;
     }
 
+    initExplosionParticles() {
+        const palette = [0xff4400, 0xff8800, 0xff0033, 0xef4444, 0x242e3d, 0xffffff];
+        const boxGeo = new THREE.BoxGeometry(0.5, 0.3, 0.5);
+        const mats = palette.map(c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 1.0 }));
+
+        for (let i = 0; i < 45; i++) {
+            const mesh = new THREE.Mesh(boxGeo, mats[i % mats.length]);
+            mesh.visible = false;
+            this.debrisGroup.add(mesh);
+            this.explosionParticles.push({
+                mesh: mesh,
+                vel: new THREE.Vector3(),
+                rotSpeed: new THREE.Vector3(),
+                life: 0.0,
+                decay: 1.0,
+                active: false
+            });
+        }
+    }
+
+    destroy(reason = 'combat') {
+        if (!this.isAlive) return;
+        this.isAlive = false;
+        console.warn(`[HeroXWing] 💀 KAHRAMAN X-WING İMHA EDİLDİ! (Sebep: ${reason}) - isAlive = false`);
+
+        // Gemiyi gizle
+        this.shipGroup.visible = false;
+
+        // Patlama saçılması
+        const origin = this.shipGroup.position;
+        this.explosionParticles.forEach((p, idx) => {
+            p.mesh.position.copy(origin).add(new THREE.Vector3(
+                (Math.random() - 0.5) * 3.5,
+                (Math.random() - 0.5) * 3.5,
+                (Math.random() - 0.5) * 3.5
+            ));
+            const angle = Math.random() * Math.PI * 2;
+            const elevation = (Math.random() - 0.5) * Math.PI;
+            const speed = 15.0 + Math.random() * 35.0;
+
+            p.vel.set(
+                Math.cos(elevation) * Math.cos(angle) * speed,
+                Math.sin(elevation) * speed * 0.8,
+                Math.cos(elevation) * Math.sin(angle) * speed
+            );
+            p.rotSpeed.set(
+                (Math.random() - 0.5) * 12.0,
+                (Math.random() - 0.5) * 12.0,
+                (Math.random() - 0.5) * 12.0
+            );
+            p.life = 1.0;
+            p.decay = 0.5 + Math.random() * 0.8;
+            p.mesh.scale.setScalar(0.7 + Math.random() * 0.8);
+            p.mesh.visible = true;
+            p.active = true;
+        });
+    }
+
+    reset() {
+        this.isAlive = true;
+        this.shipGroup.visible = true;
+        this.shipGroup.scale.set(1, 1, 1);
+        this.explosionParticles.forEach(p => {
+            p.active = false;
+            p.mesh.visible = false;
+        });
+        console.log('[HeroXWing] 🔄 X-Wing (Red Five) Canlandırıldı ve Yeniden Başlatıldı! (isAlive = true)');
+    }
+
     applyEnvMap(envMap) {
         if (!this.xWingMesh) return;
         this.xWingMesh.traverse((child) => {
@@ -245,7 +324,33 @@ export class HeroXWing {
     }
 
     update(shipData, flyDataOrDt = 0.016, neuralDataOrRolling = false) {
+        const dt = (typeof flyDataOrDt === 'number') ? flyDataOrDt : 0.016;
+
+        // Patlama parçacıklarını güncelle
+        if (this.explosionParticles) {
+            this.explosionParticles.forEach(p => {
+                if (!p.active) return;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.mesh.rotation.x += p.rotSpeed.x * dt;
+                p.mesh.rotation.y += p.rotSpeed.y * dt;
+                p.vel.y -= 18.0 * dt; // Siper tabanına yerçekimi düşüşü
+                p.life -= p.decay * dt;
+                if (p.life <= 0) {
+                    p.active = false;
+                    p.mesh.visible = false;
+                } else {
+                    p.mesh.scale.setScalar(p.life);
+                }
+            });
+        }
+
         if (!this.isLoaded || !shipData) return;
+
+        // Eğer gemi ölü ise pozisyonu ve rotasyonu dondur
+        if (!this.isAlive) {
+            this.collisionBox.makeEmpty();
+            return;
+        }
 
         // Gemi pozisyonu ve rotasyonu
         this.shipGroup.position.set(shipData.x, shipData.y, shipData.z);
@@ -270,7 +375,7 @@ export class HeroXWing {
 
         // Hasar flaşı
         if (this.damageFlashTimer > 0) {
-            this.damageFlashTimer -= (typeof flyDataOrDt === 'number' ? flyDataOrDt : 0.016);
+            this.damageFlashTimer -= dt;
         }
     }
 }

@@ -64,15 +64,20 @@ class SpacewarsSimulation {
 
         // Alt Sistemler
         this.trench = new SpacewarsTrench(this.scene);
+
+        // 1. Ana Gemi: Biyolojik Sinek Kontrollü Kahraman X-Wing (Red Five)
         this.heroXWing = new HeroXWing(this.scene);
+        this.playerShip = this.heroXWing; // Birincil Oyuncu Gemisi Referansı
         this.tieFighter = this.heroXWing; // Geriye dönük uyumluluk takma adı
+        this.isPlayerAlive = true;
+
         this.exhaustPort = new ExhaustPort(this.scene);
         this.hologram = new NeuralHologram('hologram-container');
         this.torpedoes = new ProtonTorpedoSystem(this.scene);
         this.deathStar = new DeathStarStation(this.scene);
         this.starfield = new StarfieldSystem(this.scene);
 
-        // Çoklu-Ajan Düşman İmparatorluk TIE Fighter Filosu (Multi-Agent SNN)
+        // 2. Çoklu-Ajan Düşman İmparatorluk TIE Fighter Filosu (Multi-Agent SNN)
         this.enemyTieSquadron = new EnemyTieSquadron(
             this.scene,
             this.audioListener,
@@ -83,6 +88,8 @@ class SpacewarsSimulation {
                 this.onTieDestroyed(agentId, reason);
             }
         );
+        this.enemyShip = this.enemyTieSquadron; // Birincil Düşman Filosu Referansı
+        this.enemySquadron = this.enemyTieSquadron;
         this.darkXWingManager = this.enemyTieSquadron; // Geriye dönük uyumluluk takma adı
 
         // Sinematik Yönetmen Modu (Star Wars: A New Hope Trench Run Storyboard)
@@ -1129,15 +1136,22 @@ class SpacewarsSimulation {
 
                 // PROBOSCIS EXTENSION REFLEX (PER) İLE TORPİDO VE LAZER ATEŞLEME:
                 // Sinek hedefin tam üstüne gelip besini tatmaya/ısırmaya çalıştığında WebSocket üzerinden
-                // motor komut ulaşır ve TIE Fighter ikiz proton torpidolarını fırlatır!
+                // motor komut ulaşır ve Kahraman X-Wing ikiz proton torpidolarını fırlatır!
+                // ZOMBİ SİNEK KORUMASI: Eğer X-Wing imha edilmişse (isAlive = false) hortum uzatma sinyalleri KESİNLİKLE yoksayılır!
                 if (data.neural && data.neural.proboscis_trigger) {
-                    if (this.isFinaleActive && this.deathStarHp > 0 && !this.torpedoes.isFired) {
+                    if (!this.isPlayerAlive || (this.playerShip && !this.playerShip.isAlive) || this.isGameOver) {
+                        console.warn('[ZOMBIE FLY PREVENTED] Ölü X-Wing torpido ateşleyemez! Python PER sinyali yoksayıldı.');
+                    } else if (this.isFinaleActive && this.deathStarHp > 0 && !this.torpedoes.isFired) {
                         this.fireProtonTorpedoes();
                     }
                 }
                 // SNN Sineğin hortum/bacak refleksiyle öndeki hedeflere karşı lazer karşı saldırısı:
                 if (data.neural && data.neural.tie_fire_laser) {
-                    this.fireTieLasers();
+                    if (!this.isPlayerAlive || (this.playerShip && !this.playerShip.isAlive) || this.isGameOver) {
+                        console.warn('[ZOMBIE FLY PREVENTED] Ölü X-Wing lazer ateşleyemez! Sinyal yoksayıldı.');
+                    } else {
+                        this.fireHeroLasers();
+                    }
                 }
             } catch (e) {
                 console.error('[WS Parse Hatası]', e);
@@ -1260,6 +1274,11 @@ class SpacewarsSimulation {
     }
 
     fireProtonTorpedoes() {
+        // ZOMBİ SİNEK KORUMASI: İmha edilmiş bir X-Wing KESİNLİKLE torpido ateşleyemez!
+        if (!this.isPlayerAlive || (this.playerShip && !this.playerShip.isAlive) || this.isGameOver) {
+            console.warn('[ZOMBIE FLY PREVENTED] X-Wing imha edilmiş! Ölü gemi torpido ateşleyemez!');
+            return;
+        }
         if (!this.isFinaleActive || this.deathStarHp <= 0 || this.torpedoes.isFired) return;
         this.finalePhase = 2;
 
@@ -1355,6 +1374,12 @@ class SpacewarsSimulation {
     }
 
     onTorpedoImpact(pos) {
+        // ZOMBİ SİNEK KORUMASI: X-Wing hayatta değilse Death Star hasar alamaz ve bölüm kazanılamaz!
+        if (!this.isPlayerAlive || (this.playerShip && !this.playerShip.isAlive) || this.isGameOver) {
+            console.warn('[ZOMBIE FLY PREVENTED] Ölü X-Wing torpidosu reaktöre hasar veremez!');
+            return;
+        }
+
         if (this.deathStarHp > 1) {
             // ARA DARBE (1-4): Kalkan 1 azalır, ara reaktör patlaması, dopamin ödülü, torpidolar yeniden yüklenir!
             this.deathStarHp--;
@@ -1885,8 +1910,14 @@ class SpacewarsSimulation {
     }
 
     onLaserHit() {
+        if (!this.isPlayerAlive || (this.playerShip && this.playerShip.isAlive === false) || this.isGameOver) return;
+
         this.lives--;
         this.updateHealthUI();
+
+        if (this.playerShip?.triggerDamageFlash) {
+            this.playerShip.triggerDamageFlash();
+        }
 
         try {
             if (this.damageSound) {
@@ -1908,15 +1939,69 @@ class SpacewarsSimulation {
         }
 
         if (this.lives <= 0) {
-            this.isGameOver = true;
-            const alertEl = document.getElementById('banner-game-over');
-            if (alertEl) alertEl.style.display = 'block';
-            console.log('💀 SİNEK HASAR ALDI - NÖRAL KALKANLAR VE SİNAPSLAR YENİLENİYOR');
-            setTimeout(() => {
-                if (this.isGameOver && !this.isVictory) {
-                    this.showGameOverModal(false);
-                }
-            }, 1500);
+            this.destroyPlayerShip('enemy_tie_laser_hit');
+        }
+    }
+
+    destroyPlayerShip(reason = 'enemy_tie_laser_hit') {
+        if (!this.isPlayerAlive && this.playerShip && this.playerShip.isAlive === false) return;
+
+        this.isPlayerAlive = false;
+        this.isGameOver = true;
+        this.lives = 0;
+        this.updateHealthUI();
+
+        if (this.playerShip?.destroy) {
+            this.playerShip.destroy(reason);
+        }
+        if (this.heroXWing?.destroy && this.heroXWing !== this.playerShip) {
+            this.heroXWing.destroy(reason);
+        }
+
+        this.cameraTrauma = 1.0;
+        try {
+            if (this.damageSound) {
+                if (this.damageSound.isPlaying) this.damageSound.stop();
+                this.damageSound.play();
+            }
+            if (this.deathStarExplosionSound) {
+                this.deathStarExplosionSound.play();
+            }
+        } catch (e) {}
+
+        const bannerText = reason === 'trench_wall_crash'
+            ? '💥 SİPER DUVARI ÇARPIŞMASI: KAHRAMAN X-WING İMHA EDİLDİ!'
+            : '💀 TIE FIGHTER LAZERİ: KAHRAMAN X-WING İMHA EDİLDİ!';
+
+        const alertEl = document.getElementById('banner-game-over');
+        if (alertEl) {
+            alertEl.innerText = bannerText;
+            alertEl.style.display = 'block';
+        }
+
+        console.warn(`[HeroXWing Destroyed] 💀 Kahraman X-Wing İmha Edildi! (${reason}) - isAlive = false. Zombi sinek engellendi.`);
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'player_destroyed', reason: reason }));
+        }
+
+        setTimeout(() => {
+            if (this.isGameOver && !this.isVictory) {
+                this.showGameOverModal(false);
+            }
+        }, 1500);
+    }
+
+    checkWallCollision(shipPos) {
+        if (!this.isPlayerAlive || !this.playerShip || (this.playerShip.isAlive === false) || this.isGameOver) return;
+
+        // Siper Duvar ve Zemin Sınırları:
+        // Sol/Sağ duvarlar: Math.abs(x) > 46.5
+        // Zemin: y < 1.5, Tavan: y > 108.0
+        const isWallHit = (Math.abs(shipPos.x) > 46.5) || (shipPos.y < 1.5) || (shipPos.y > 108.0);
+        if (isWallHit) {
+            console.warn(`[Collision] 💥 Kahraman X-Wing siper duvarına çarptı! (x=${shipPos.x.toFixed(1)}, y=${shipPos.y.toFixed(1)})`);
+            this.destroyPlayerShip('trench_wall_crash');
         }
     }
 
@@ -2257,10 +2342,10 @@ class SpacewarsSimulation {
                 badge.classList.add('defeat');
             }
             if (title) {
-                title.innerText = 'TIE FIGHTER DÜŞÜRÜLDÜ!';
+                title.innerText = 'X-WING DÜŞÜRÜLDÜ!';
                 title.classList.add('defeat');
             }
-            if (subtitle) subtitle.innerText = `Sinek ${totalTime} hayatta kaldı. Kalkanlar tükendi.`;
+            if (subtitle) subtitle.innerText = `Kahraman X-Wing (Red Five) ${totalTime} hayatta kaldı. İmparatorluk TIE Filosu kazandı.`;
             if (restartBtn) restartBtn.innerText = '🔄 TEKRAR DENE (R)';
         }
 
@@ -2333,6 +2418,10 @@ class SpacewarsSimulation {
         this.lives = 3;
         this.isGameOver = false;
         this.isVictory = false;
+        this.isPlayerAlive = true;
+        if (this.playerShip?.reset) this.playerShip.reset();
+        if (this.heroXWing?.reset && this.heroXWing !== this.playerShip) this.heroXWing.reset();
+        this.updateHealthUI();
         this.isFinaleActive = false;
         this.isVelocitySynced = false;
         this.finalePhase = 0;
@@ -2503,6 +2592,13 @@ class SpacewarsSimulation {
                 }
             } catch (errHero) {
                 console.warn('[GameLoop Recovery] Hero X-Wing animasyon hatası:', errHero);
+            }
+
+            // 3b. Kahraman X-Wing Siper Duvarı ve Taban Çarpışma Tespiti
+            try {
+                this.checkWallCollision(ship);
+            } catch (errWall) {
+                console.warn('[GameLoop Recovery] Duvar çarpışma kontrolü hatası:', errWall);
             }
 
             // 3b. Çoklu-Ajan Düşman İmparatorluk TIE Fighter Filosu (Multi-Agent SNN & 1 HP Glass Cannon)

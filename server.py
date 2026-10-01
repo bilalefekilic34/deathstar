@@ -150,6 +150,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     brain.on_laser_hit()
                     print("[WebSocket] 💥 Kahraman X-Wing Düşman TIE Fighter Lazeriyle Vuruldu!")
 
+                elif msg_type == "player_destroyed":
+                    # X-Wing imha edildiğinde SNN motorunda hortum refleksini sıfırla
+                    brain.on_laser_hit()
+                    brain.proboscis_triggered = False
+                    print(f"[WebSocket] 💀 Kahraman X-Wing İmha Edildi! (Sebep: {data.get('reason', 'combat')})")
+
                 elif msg_type == "exhaust_entered":
                     # Egzoz çukuruna ulaşıldı! +40 mV Dopamin & +100 Plastisite
                     brain.on_exhaust_reached()
