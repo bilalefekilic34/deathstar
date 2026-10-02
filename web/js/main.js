@@ -1134,7 +1134,8 @@ class SpacewarsSimulation {
                 }
 
                 try {
-                    this.updateHUD(data);
+                    const currentBrain = this.getCurrentBrainTelemetry();
+                    this.updateHUD(currentBrain.fullData);
                 } catch (hudErr) {
                     console.warn('[HUD Error]', hudErr);
                 }
@@ -2320,6 +2321,91 @@ class SpacewarsSimulation {
         });
     }
 
+    getCurrentBrainTelemetry() {
+        if (!this.spectatorTargetId || this.spectatorTargetId === 'hero_xwing') {
+            return {
+                agentId: 'hero_xwing',
+                agentTitle: 'RED 5 (KAHRAMAN X-WING)',
+                agentType: 'hero',
+                neural: this.latestData?.neural || {},
+                fly: this.latestData?.fly || {},
+                ship: this.latestData?.ship || {},
+                fullData: this.latestData || {}
+            };
+        }
+
+        // TIE Fighter İzleniyor: İlgili TIE Fighter'ın SNN nöral verisine yönlendir
+        const enemyTelemetry = (this.latestData?.enemies || []).find(e => e.id === this.spectatorTargetId);
+        if (enemyTelemetry) {
+            const cleanName = enemyTelemetry.id.toUpperCase().replace('_', ' ');
+            const cleanTitle = `İMPARATORLUK TIE (${cleanName})`;
+
+            const enemyNeural = enemyTelemetry.neural || {};
+            const potentials = enemyNeural.potentials || {
+                v_lc10a: enemyNeural.v_lc10a ?? -70.0,
+                v_proboscis: enemyNeural.v_proboscis ?? -70.0,
+                v_dnp01: enemyNeural.v_dnp01 ?? -70.0,
+                v_b1_l: -70.0,
+                v_b1_r: -70.0
+            };
+
+            const normalizedNeural = {
+                spikes: enemyNeural.spikes || [],
+                potentials: potentials,
+                dopamine_mv: typeof enemyNeural.dopamine_mv === 'number' ? enemyNeural.dopamine_mv : (enemyNeural.lock_ratio ? enemyNeural.lock_ratio * 35.0 : 0.0),
+                is_barrel_rolling: Boolean(enemyNeural.is_barrel_rolling),
+                proboscis_trigger: Boolean(enemyTelemetry.fire_laser),
+                tie_fire_laser: Boolean(enemyTelemetry.fire_laser),
+                v_lc10a: enemyNeural.v_lc10a ?? potentials.v_lc10a ?? -70.0,
+                v_proboscis: enemyNeural.v_proboscis ?? potentials.v_proboscis ?? -70.0,
+                lock_ratio: enemyNeural.lock_ratio ?? 0.0
+            };
+
+            const enemyFly = {
+                wing_l: enemyTelemetry.wing_l ?? 0.0,
+                wing_r: enemyTelemetry.wing_r ?? 0.0,
+                delta_phi: enemyTelemetry.delta_phi ?? 0.0,
+                freq: 200.0
+            };
+
+            const syntheticFull = {
+                ...(this.latestData || {}),
+                ship: {
+                    x: enemyTelemetry.x,
+                    y: enemyTelemetry.y,
+                    z: enemyTelemetry.z,
+                    roll: enemyTelemetry.roll,
+                    pitch: enemyTelemetry.pitch,
+                    yaw: enemyTelemetry.yaw,
+                    speed: enemyTelemetry.speed
+                },
+                neural: normalizedNeural,
+                fly: enemyFly
+            };
+
+            return {
+                agentId: enemyTelemetry.id,
+                agentTitle: cleanTitle,
+                agentType: 'enemy',
+                neural: normalizedNeural,
+                fly: enemyFly,
+                ship: syntheticFull.ship,
+                fullData: syntheticFull
+            };
+        }
+
+        // Fallback: Ana Gemi (X-Wing)
+        return {
+            agentId: 'hero_xwing',
+            agentTitle: 'RED 5 (KAHRAMAN X-WING)',
+            agentType: 'hero',
+            neural: this.latestData?.neural || {},
+            fly: this.latestData?.fly || {},
+            ship: this.latestData?.ship || {},
+            fullData: this.latestData || {}
+        };
+    }
+
     setSpectatorTarget(agentId) {
         const agents = this.getActiveAgents();
         const found = agents.find(a => a.id === agentId);
@@ -2329,11 +2415,22 @@ class SpacewarsSimulation {
             this.spectatorTargetId = 'hero_xwing';
         }
 
-        // Anında UI güncelle
+        // Anında UI & Nöral Veri Yönlendirmesi (Data Routing)
         this.lastAgentsHash = '';
         this.updateActiveAgentsUI();
 
-        console.log(`[Spectator] 🎥 Kamera Hedefi Değiştirildi: ${this.spectatorTargetId}`);
+        const currentBrain = this.getCurrentBrainTelemetry();
+        const holoLabel = document.getElementById('hologram-label');
+        if (holoLabel) {
+            holoLabel.innerText = `3D BEYİN: ${currentBrain.agentTitle}`;
+            holoLabel.style.color = currentBrain.agentType === 'hero' ? '#38bdf8' : '#10b981';
+        }
+
+        try {
+            this.updateHUD(currentBrain.fullData);
+        } catch (e) {}
+
+        console.log(`[Spectator] 🎥 Kamera & Nöral Hedef Değiştirildi: ${this.spectatorTargetId} (${currentBrain.agentTitle})`);
     }
 
     cycleSpectatorTarget(direction = 1) {
@@ -2375,6 +2472,15 @@ class SpacewarsSimulation {
                 this.spectatorTargetId = 'hero_xwing';
                 this.lastAgentsHash = '';
                 this.updateActiveAgentsUI();
+                const currentBrain = this.getCurrentBrainTelemetry();
+                const holoLabel = document.getElementById('hologram-label');
+                if (holoLabel) {
+                    holoLabel.innerText = `3D BEYİN: ${currentBrain.agentTitle}`;
+                    holoLabel.style.color = '#38bdf8';
+                }
+                try {
+                    this.updateHUD(currentBrain.fullData);
+                } catch (e) {}
                 currentTarget = agents.find(a => a.id === 'hero_xwing') || agents[0];
             }
         }
@@ -2587,6 +2693,11 @@ class SpacewarsSimulation {
         this.spectatorTargetId = 'hero_xwing';
         this.lastAgentsHash = '';
         this.updateActiveAgentsUI();
+        const holoLabel = document.getElementById('hologram-label');
+        if (holoLabel) {
+            holoLabel.innerText = '3D SİNEK BEYNİ: RED 5 (KAHRAMAN X-WING)';
+            holoLabel.style.color = '#38bdf8';
+        }
         ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar', 'btn-cam-enemy'].forEach((id, idx) => {
             const btn = document.getElementById(id);
             if (btn) {
@@ -2616,6 +2727,11 @@ class SpacewarsSimulation {
         this.spectatorTargetId = 'hero_xwing';
         this.lastAgentsHash = '';
         this.updateActiveAgentsUI();
+        const holoLabel = document.getElementById('hologram-label');
+        if (holoLabel) {
+            holoLabel.innerText = '3D SİNEK BEYNİ: RED 5 (KAHRAMAN X-WING)';
+            holoLabel.style.color = '#38bdf8';
+        }
         if (this.playerShip?.reset) this.playerShip.reset();
         if (this.heroXWing?.reset && this.heroXWing !== this.playerShip) this.heroXWing.reset();
         this.updateHealthUI();
@@ -2894,10 +3010,11 @@ class SpacewarsSimulation {
                 console.warn('[GameLoop Recovery] Lazer güncelleme hatası:', errLasers);
             }
 
-            // 8. 3D Nöral Hologram
+            // 8. 3D Nöral Hologram (İzlenen Ajanın Gerçek Zamanlı SNN Telemetrisi & Hover Scale)
             try {
                 if (this.hologram?.update) {
-                    this.hologram.update(this.latestData.neural, this.latestData);
+                    const currentBrain = this.getCurrentBrainTelemetry();
+                    this.hologram.update(currentBrain.neural, currentBrain.fullData, currentBrain, dt);
                 }
             } catch (errHolo) {
                 console.warn('[GameLoop Recovery] Hologram güncelleme hatası:', errHolo);

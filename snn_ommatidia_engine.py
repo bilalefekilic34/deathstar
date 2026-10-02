@@ -1030,8 +1030,18 @@ class XWingDrosophilaBrain:
             "neural": {
                 "v_lc10a": float(self.v_lc10a),
                 "v_proboscis": float(self.v_proboscis),
+                "v_dnp01": float(-70.0 if not (dist < 18.0 and is_tie_barrel_rolling) else -38.0),
                 "lock_ratio": float(round(self.aim_lock_ratio, 2)),
-                "spikes": spikes
+                "spikes": spikes,
+                "potentials": {
+                    "v_lc10a": float(self.v_lc10a),
+                    "v_proboscis": float(self.v_proboscis),
+                    "v_dnp01": float(-70.0 if not (dist < 18.0 and is_tie_barrel_rolling) else -38.0),
+                    "v_b1_l": float(self.v_b1_l),
+                    "v_b1_r": float(self.v_b1_r)
+                },
+                "dopamine_mv": float(round(self.aim_lock_ratio * 35.0, 1)),
+                "is_barrel_rolling": False
             }
         }
 

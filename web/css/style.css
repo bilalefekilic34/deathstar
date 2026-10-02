@@ -526,11 +526,55 @@ body, html {
     -webkit-backdrop-filter: var(--glass-blur);
     box-shadow: 0 8px 32px rgba(0, 240, 255, 0.22), inset 0 0 15px rgba(0, 240, 255, 0.08);
     cursor: grab;
-    transition: width 0.3s ease, height 0.3s ease, box-shadow 0.3s ease;
+    z-index: 80;
+    transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                height 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.35s ease,
+                background 0.35s ease,
+                box-shadow 0.35s ease;
+}
+
+#hologram-container:hover {
+    width: 390px;   /* 260px * 1.5 = 390px (150% Genişlik) */
+    height: 315px;  /* 210px * 1.5 = 315px (150% Yükseklik) */
+    border-color: rgba(0, 240, 255, 0.85);
+    background: rgba(11, 19, 32, 0.96);
+    box-shadow: 0 16px 48px rgba(0, 240, 255, 0.45), inset 0 0 25px rgba(0, 240, 255, 0.16);
+    z-index: 150;
 }
 
 #hologram-container:active {
     cursor: grabbing;
+}
+
+#hologram-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+.hologram-inspect-tag {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 0.60rem;
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 0.8px;
+    color: #fef08a;
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    padding: 2px 7px;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 10;
+}
+
+#hologram-container:hover .hologram-inspect-tag {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 #hologram-label {
@@ -547,6 +591,11 @@ body, html {
     border-radius: 4px;
     pointer-events: none;
     z-index: 10;
+    transition: font-size 0.3s ease;
+}
+
+#hologram-container:hover #hologram-label {
+    font-size: 0.72rem;
 }
 
 /* Raycaster Hover Tooltip Pop-up (Canlı SNN Telemetrisi) */

@@ -64,6 +64,11 @@ export class NeuralHologram {
         this.hoveredRegion = null;
         this.tooltipEl = null;
         this.isMouseOverContainer = false;
+        this.isHovered = false;
+
+        // UI Kutu Boyutları & Dinamik Canvas Çözünürlüğü Takibi (Anti-Stretching)
+        this.currentWidth = 260;
+        this.currentHeight = 210;
 
         // Mouse ile Serbest Döndürme (Drag to Rotate)
         this.isDragging = false;
@@ -73,6 +78,7 @@ export class NeuralHologram {
         // En son gelen telemetri verileri önbelleği
         this.lastNeuralData = null;
         this.lastFullData = null;
+        this.lastAgentInfo = null;
 
         this.initTooltip();
     }
@@ -86,6 +92,10 @@ export class NeuralHologram {
             el.innerHTML = `
                 <div class="brain-tooltip-header" id="btt-title">SİNEK BEYNİ KORTEKSİ</div>
                 <div class="brain-tooltip-row">
+                    <span>İzlenen Ajan:</span>
+                    <span class="brain-tooltip-val" id="btt-agent" style="color: #38bdf8;">RED 5 (X-WING)</span>
+                </div>
+                <div class="brain-tooltip-row">
                     <span>Devre / Nöropil:</span>
                     <span class="brain-tooltip-val" id="btt-circuit">Janelia CNS</span>
                 </div>
@@ -98,7 +108,7 @@ export class NeuralHologram {
                     <span class="brain-tooltip-val" id="btt-voltage">-70.0 mV</span>
                 </div>
                 <div class="brain-tooltip-row">
-                    <span>Ateşleme Frekansı:</span>
+                    <span>Ateşleme Frekansı / Ödül:</span>
                     <span class="brain-tooltip-val" id="btt-freq">200 Hz</span>
                 </div>
             `;
@@ -129,6 +139,25 @@ export class NeuralHologram {
         const rimMagentaLight = new THREE.DirectionalLight(0xff00aa, 1.8);
         rimMagentaLight.position.set(-15, -10, -15);
         this.scene.add(rimMagentaLight);
+
+        // Kutu Büyüdüğünde ve Küçüldüğünde Canvas Çözünürlüğünü Otomatik Güncelle (ResizeObserver)
+        if (window.ResizeObserver && this.container) {
+            this.resizeObserver = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const cr = entry.contentRect;
+                    if (cr.width > 0 && cr.height > 0) {
+                        const rw = Math.round(cr.width);
+                        const rh = Math.round(cr.height);
+                        this.currentWidth = rw;
+                        this.currentHeight = rh;
+                        this.camera.aspect = rw / rh;
+                        this.camera.updateProjectionMatrix();
+                        this.renderer.setSize(rw, rh, false);
+                    }
+                }
+            });
+            this.resizeObserver.observe(this.container);
+        }
 
         // 3D Sinek Beyni Modelini Yükle (/models/drosophila_brain.glb)
         await this.loadBrainModel();
@@ -355,12 +384,17 @@ export class NeuralHologram {
         if (!this.tooltipEl) return;
 
         const titleEl = document.getElementById('btt-title');
+        const agentEl = document.getElementById('btt-agent');
         const circuitEl = document.getElementById('btt-circuit');
         const actEl = document.getElementById('btt-activity');
         const voltEl = document.getElementById('btt-voltage');
         const freqEl = document.getElementById('btt-freq');
 
         if (titleEl) titleEl.innerText = data.regionName || 'DROSOPHILA BEYNİ';
+        if (agentEl) {
+            agentEl.innerText = data.agentTitle || 'RED 5 (X-WING)';
+            agentEl.style.color = data.agentColor || '#38bdf8';
+        }
         if (circuitEl) circuitEl.innerText = data.circuit || 'SNN Devresi';
         if (actEl) {
             actEl.innerText = data.activityStatus || 'AKTİF';
@@ -379,11 +413,12 @@ export class NeuralHologram {
         this.hoveredRegion = null;
     }
 
-    update(neuralData, fullData = null) {
+    update(neuralData, fullData = null, agentInfo = null, dt = 0.016) {
         if (!this.container) return;
 
         this.lastNeuralData = neuralData || this.lastNeuralData;
         this.lastFullData = fullData || this.lastFullData;
+        this.lastAgentInfo = agentInfo || this.lastAgentInfo;
 
         const isRolling = Boolean(neuralData?.is_barrel_rolling);
         const dopamine = typeof neuralData?.dopamine_mv === 'number' ? neuralData.dopamine_mv : 0.0;
@@ -392,7 +427,7 @@ export class NeuralHologram {
 
         // 1. Dinamik Emissive Mapping Hedeflerini Güncelle
         // A. Dev Fiber (Giant Fiber - DNp01): Fıçı tonosu / Kaçışta Şiddetli Kırmızı Parlama (#ff0033)
-        if (isRolling || spikes.some(s => s.includes('DNp01'))) {
+        if (isRolling || spikes.some(s => s.includes('DNp01')) || (potentials.v_dnp01 && potentials.v_dnp01 > -55.0)) {
             this.emissiveState.giantFiber.target = 4.2;
             this.emissiveState.giantFiber.color.setHex(0xff0033);
         } else {
@@ -400,7 +435,7 @@ export class NeuralHologram {
         }
 
         // B. Optik Loblar (LC10a): Egzoz deliğine kilitlenirken veya görsel takipte Neon Mavi Parlama (#00f0ff)
-        if (spikes.includes('LC10a') || (potentials.v_lc10a && potentials.v_lc10a > -55.0)) {
+        if (spikes.includes('LC10a') || (potentials.v_lc10a && potentials.v_lc10a > -55.0) || (neuralData?.lock_ratio && neuralData.lock_ratio > 0.4)) {
             this.emissiveState.opticLobe.target = 3.6;
             this.emissiveState.opticLobe.color.setHex(0x00f0ff);
         } else {
@@ -411,7 +446,7 @@ export class NeuralHologram {
         if (dopamine > 5.0) {
             const intensity = Math.min(5.0, 1.2 + (dopamine / 40.0) * 3.5);
             this.emissiveState.mushroomBody.target = intensity;
-            if (dopamine > 30.0) {
+            if (dopamine > 25.0) {
                 this.emissiveState.mushroomBody.color.setHex(0xffd700); // Altın Sarısı
             } else {
                 this.emissiveState.mushroomBody.color.setHex(0x00ff88); // Canlı Zümrüt Yeşili
@@ -471,12 +506,25 @@ export class NeuralHologram {
             this.brainGroup.rotation.x *= 0.96; // X ekseninde merkeze yumuşak dönüş
         }
 
-        // 4. Raycaster ile Hover ve Tooltip Güncellemesi
+        // 4. Canvas Çözünürlüğünün ve En-Boy Oranının Korunması (Anti-Stretching Dynamic Sync)
+        const curW = this.container.clientWidth;
+        const curH = this.container.clientHeight;
+        if (curW > 0 && curH > 0 && (curW !== this.currentWidth || curH !== this.currentHeight)) {
+            this.currentWidth = curW;
+            this.currentHeight = curH;
+            this.camera.aspect = curW / curH;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(curW, curH, false);
+        }
+
+        // 5. Raycaster ile Yalnızca Bölgesel Nöropil Tespiti & Tooltip (Mesh Büyütme İptal Edildi)
+        let isHit = false;
         if (this.isLoaded && this.isMouseOverContainer) {
             this.raycaster.setFromCamera(this.mouse, this.camera);
             const intersects = this.raycaster.intersectObjects(this.interactiveMeshes, false);
 
             if (intersects.length > 0) {
+                isHit = true;
                 // En öndeki öncelikli spesifik lobu seç (Cortex arkadaki spesifik lobları maskelemesin)
                 let selected = intersects[0].object;
                 for (const hit of intersects) {
@@ -496,14 +544,15 @@ export class NeuralHologram {
                 let freq = '200 Hz';
 
                 if (selected === this.giantFiberMesh) {
-                    if (isRolling) {
-                        actStatus = 'ATEŞLENDİ (360° Fıçı Tonosu)!';
+                    if (isRolling || (potentials.v_dnp01 && potentials.v_dnp01 > -55.0)) {
+                        actStatus = 'ATEŞLENDİ (360° Fıçı Tonosu / Kaçış)!';
                         stColor = '#ff0044';
                     }
                     volt = `${(potentials.v_dnp01 || -70.0).toFixed(1)} mV`;
                 } else if (selected === this.opticLobeLeftMesh || selected === this.opticLobeRightMesh) {
-                    if (spikes.includes('LC10a') || (potentials.v_lc10a && potentials.v_lc10a > -55.0)) {
-                        actStatus = 'HEDEFE KİLİTLENDİ (LC10a)!';
+                    const lockPct = (neuralData?.lock_ratio ? (neuralData.lock_ratio * 100).toFixed(0) : '95');
+                    if (spikes.includes('LC10a') || (potentials.v_lc10a && potentials.v_lc10a > -55.0) || (neuralData?.lock_ratio && neuralData.lock_ratio > 0.4)) {
+                        actStatus = `HEDEFE KİLİTLENDİ (LC10a - %${lockPct})!`;
                         stColor = '#00f0ff';
                     }
                     volt = `${(potentials.v_lc10a || -70.0).toFixed(1)} mV`;
@@ -521,6 +570,8 @@ export class NeuralHologram {
                 }
 
                 this.showTooltip({
+                    agentTitle: this.lastAgentInfo?.agentTitle || 'RED 5 (X-WING)',
+                    agentColor: this.lastAgentInfo?.agentType === 'hero' ? '#38bdf8' : '#10b981',
                     regionName: uData.regionName,
                     circuit: uData.circuit,
                     activityStatus: actStatus,
@@ -528,10 +579,15 @@ export class NeuralHologram {
                     voltage: volt,
                     freq: freq
                 });
-            } else {
-                this.hideTooltip();
             }
         }
+
+        if (!isHit) {
+            this.hideTooltip();
+        }
+
+        // 3D Beyin Modeli Orijinal Boyutunda Sabit Kalır (Kutunun kendisi CSS ile büyür)
+        this.brainGroup.scale.set(1.0, 1.0, 1.0);
 
         // Sahneyi çiz
         this.renderer.render(this.scene, this.camera);
