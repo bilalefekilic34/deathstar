@@ -95,6 +95,11 @@ class SpacewarsSimulation {
         // Sinematik Yönetmen Modu (Star Wars: A New Hope Trench Run Storyboard)
         this.directorMode = new DirectorMode(this);
 
+        // Dinamik Gözlemci Modu & Kamera Yönetim Sistemi (Spectator Camera Switcher)
+        this.spectatorTargetId = 'hero_xwing'; // 'hero_xwing' veya 'tie_1', 'tie_2' vb.
+        this.activeAgents = [];
+        this.lastAgentsHash = '';
+
         this.dirLight = null;
 
         // Lazerler & Tehditler
@@ -2205,9 +2210,192 @@ class SpacewarsSimulation {
         }
     }
 
+    // =========================================================================
+    // DİNAMİK GÖZLEMCİ MODU & AKTİF AJANLAR YÖNETİM SİSTEMİ (SPECTATOR SYSTEM)
+    // =========================================================================
+
+    getActiveAgents() {
+        const list = [];
+        // 1. Ana Gemi (Kahraman X-Wing / Red Five)
+        const isHeroAlive = Boolean(this.isPlayerAlive && this.playerShip && this.playerShip.isAlive);
+        list.push({
+            id: 'hero_xwing',
+            type: 'hero',
+            name: 'RED 5',
+            fullTitle: 'KAHRAMAN X-WING (RED FIVE)',
+            isAlive: isHeroAlive,
+            object: this.playerShip?.shipGroup,
+            speed: (this.latestData?.ship?.speed || 35.0),
+            hp: this.lives || 3
+        });
+
+        // 2. Çoklu-Ajan Düşman İmparatorluk TIE Fighter Filosu
+        if (this.enemyTieSquadron?.activeEnemies) {
+            for (const [agentId, inst] of this.enemyTieSquadron.activeEnemies.entries()) {
+                if (inst && inst.isAlive && inst.group) {
+                    const cleanName = agentId.toUpperCase().replace('_', ' ');
+                    list.push({
+                        id: agentId,
+                        type: 'enemy',
+                        name: cleanName,
+                        fullTitle: `İMPARATORLUK TIE (${cleanName})`,
+                        isAlive: true,
+                        object: inst.group,
+                        speed: (inst.speed || 135.0),
+                        hp: inst.hp || 1
+                    });
+                }
+            }
+        }
+        return list;
+    }
+
+    updateActiveAgentsUI() {
+        const container = document.getElementById('active-agents-list');
+        if (!container) return;
+
+        const agents = this.getActiveAgents();
+        this.activeAgents = agents;
+
+        // Benzersiz hash kontrolü (Zero GC & gereksiz DOM re-render engelleme)
+        const currentHash = agents.map(a => `${a.id}:${a.isAlive ? 1 : 0}`).join('|') + `|target:${this.spectatorTargetId}`;
+        if (currentHash === this.lastAgentsHash) {
+            return;
+        }
+        this.lastAgentsHash = currentHash;
+
+        // DOM Temizle ve Portreleri Dinamik Render Et
+        container.innerHTML = '';
+
+        const heroFlySvg = `<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="16" cy="18" rx="7" ry="8.5" fill="#0f172a" stroke="#38bdf8" stroke-width="1.6"/>
+            <ellipse cx="11" cy="16" rx="4.5" ry="6" fill="#ef4444" opacity="0.95"/>
+            <ellipse cx="21" cy="16" rx="4.5" ry="6" fill="#ef4444" opacity="0.95"/>
+            <circle cx="10" cy="14" r="1.4" fill="#fef08a"/>
+            <circle cx="20" cy="14" r="1.4" fill="#fef08a"/>
+            <path d="M12 9C10 5 7 4 5 5M20 9C22 5 25 4 27 5" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="16" cy="10" r="1.8" fill="#00f0ff"/>
+        </svg>`;
+
+        const enemyFlySvg = `<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="16" cy="18" rx="7.5" ry="8.5" fill="#090d16" stroke="#10b981" stroke-width="1.6"/>
+            <ellipse cx="11" cy="16" rx="4.5" ry="6" fill="#10b981" opacity="0.95"/>
+            <ellipse cx="21" cy="16" rx="4.5" ry="6" fill="#10b981" opacity="0.95"/>
+            <circle cx="10" cy="15" r="1.2" fill="#a7f3d0"/>
+            <circle cx="21" cy="15" r="1.2" fill="#a7f3d0"/>
+            <path d="M13 10C11 6 8 5 6 6M19 10C21 6 24 5 26 6" stroke="#ef4444" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M14 24L16 26.5L18 24" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>`;
+
+        agents.forEach(agent => {
+            const card = document.createElement('div');
+            const isActive = (agent.id === this.spectatorTargetId);
+            card.className = `agent-portrait-card ${agent.type} ${isActive ? 'active' : ''}`;
+            card.setAttribute('data-agent-id', agent.id);
+            card.setAttribute('title', `${agent.fullTitle} (Kamerayı Odaklamak İçin Tıkla)`);
+
+            const badge = document.createElement('div');
+            badge.className = `agent-portrait-badge ${agent.type}`;
+            badge.innerText = agent.type === 'hero' ? 'XW' : 'TIE';
+
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'agent-portrait-icon';
+            iconDiv.innerHTML = agent.type === 'hero' ? heroFlySvg : enemyFlySvg;
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'agent-portrait-name';
+            nameDiv.innerText = agent.name;
+
+            card.appendChild(badge);
+            card.appendChild(iconDiv);
+            card.appendChild(nameDiv);
+
+            // Fare Tıklaması (Click) ile Spesifik Gemiyi İzleme
+            card.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.setSpectatorTarget(agent.id);
+            });
+
+            container.appendChild(card);
+        });
+    }
+
+    setSpectatorTarget(agentId) {
+        const agents = this.getActiveAgents();
+        const found = agents.find(a => a.id === agentId);
+        if (found && found.isAlive) {
+            this.spectatorTargetId = agentId;
+        } else {
+            this.spectatorTargetId = 'hero_xwing';
+        }
+
+        // Anında UI güncelle
+        this.lastAgentsHash = '';
+        this.updateActiveAgentsUI();
+
+        console.log(`[Spectator] 🎥 Kamera Hedefi Değiştirildi: ${this.spectatorTargetId}`);
+    }
+
+    cycleSpectatorTarget(direction = 1) {
+        const agents = this.getActiveAgents().filter(a => a.isAlive);
+        if (agents.length === 0) return;
+
+        let currentIndex = agents.findIndex(a => a.id === this.spectatorTargetId);
+        if (currentIndex === -1) currentIndex = 0;
+
+        const nextIndex = (currentIndex + direction + agents.length) % agents.length;
+        this.setSpectatorTarget(agents[nextIndex].id);
+    }
+
     updateCamera(dt = 0.016) {
         if (this.directorMode && this.directorMode.isActive) {
             this.directorMode.update(dt);
+            if (this.cameraTrauma > 0) {
+                this.cameraTrauma = Math.max(0, this.cameraTrauma - 0.45 * dt);
+                const shake = this.cameraTrauma * this.cameraTrauma * 3.8;
+                this.camera.position.x += (Math.random() - 0.5) * shake;
+                this.camera.position.y += (Math.random() - 0.5) * shake;
+                this.camera.position.z += (Math.random() - 0.5) * shake;
+            }
+            return;
+        }
+
+        // -------------------------------------------------------------
+        // GÖZLEMCİ MODU & ÖLÜ AJAN GÜVENLİK KİLİDİ (DEAD ENTITY FALLBACK)
+        // -------------------------------------------------------------
+        const agents = this.getActiveAgents();
+        let currentTarget = agents.find(a => a.id === this.spectatorTargetId);
+
+        // Kritik Hata Koruması: Eğer oyuncu bir TIE Fighter'ın kamerasındayken
+        // o TIE Fighter duvara çarpar veya imha edilirse (!target.isAlive),
+        // Three.js çökmesin diye kamera otomatik olarak ana gemiye (X-Wing) döner!
+        if (!currentTarget || !currentTarget.isAlive || !currentTarget.object) {
+            if (this.spectatorTargetId !== 'hero_xwing') {
+                console.warn(`[Spectator Fallback] ⚠️ Hedef ajan (${this.spectatorTargetId}) imha edildi! Kamera ana gemiye (X-Wing) güvenle geri döndürüldü.`);
+                this.spectatorTargetId = 'hero_xwing';
+                this.lastAgentsHash = '';
+                this.updateActiveAgentsUI();
+                currentTarget = agents.find(a => a.id === 'hero_xwing') || agents[0];
+            }
+        }
+
+        // Eğer bir düşman TIE Fighter izleniyorsa:
+        if (this.spectatorTargetId !== 'hero_xwing' && currentTarget && currentTarget.object) {
+            const enemyPos = currentTarget.object.position;
+            // TIE Fighter arkasından omuz üstü chase takibi
+            const targetX = enemyPos.x * 0.9;
+            const targetY = enemyPos.y + 2.4;
+            const targetZ = enemyPos.z - 11.5;
+
+            const smoothFactor = Math.min(1.0, 16.0 * dt);
+            this.camera.position.x += (targetX - this.camera.position.x) * smoothFactor;
+            this.camera.position.y += (targetY - this.camera.position.y) * smoothFactor;
+            this.camera.position.z += (targetZ - this.camera.position.z) * smoothFactor;
+
+            // Kamera TIE Fighter'ın önüne (X-Wing'e ve siper yönüne) bakar
+            this.camera.lookAt(enemyPos.x, enemyPos.y + 0.5, enemyPos.z + 45.0);
+
+            // Patlama / Çarpışma Ekran Sarsıntısı (Camera Trauma Shake)
             if (this.cameraTrauma > 0) {
                 this.cameraTrauma = Math.max(0, this.cameraTrauma - 0.45 * dt);
                 const shake = this.cameraTrauma * this.cameraTrauma * 3.8;
@@ -2366,6 +2554,9 @@ class SpacewarsSimulation {
             if (e.key === '3') this.setCameraMode(3);
             if (e.key === '4') this.setCameraMode(4);
             if (e.key === '5') this.setCameraMode(5);
+            // Gözlemci Modu Ok Tuşları ile Hızlı Kamera Geçişi
+            if (e.key === 'ArrowRight') this.cycleSpectatorTarget(1);
+            if (e.key === 'ArrowLeft') this.cycleSpectatorTarget(-1);
             if (e.key.toLowerCase() === 'd') this.injectDopamine(40.0);
             if (e.key.toLowerCase() === 'l') this.fireTieLasers();
             if (e.key.toLowerCase() === 'f') this.handleFinaleButton();
@@ -2393,6 +2584,9 @@ class SpacewarsSimulation {
 
     setCameraMode(mode) {
         this.cameraMode = mode;
+        this.spectatorTargetId = 'hero_xwing';
+        this.lastAgentsHash = '';
+        this.updateActiveAgentsUI();
         ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar', 'btn-cam-enemy'].forEach((id, idx) => {
             const btn = document.getElementById(id);
             if (btn) {
@@ -2419,6 +2613,9 @@ class SpacewarsSimulation {
         this.isGameOver = false;
         this.isVictory = false;
         this.isPlayerAlive = true;
+        this.spectatorTargetId = 'hero_xwing';
+        this.lastAgentsHash = '';
+        this.updateActiveAgentsUI();
         if (this.playerShip?.reset) this.playerShip.reset();
         if (this.heroXWing?.reset && this.heroXWing !== this.playerShip) this.heroXWing.reset();
         this.updateHealthUI();
@@ -2706,11 +2903,12 @@ class SpacewarsSimulation {
                 console.warn('[GameLoop Recovery] Hologram güncelleme hatası:', errHolo);
             }
 
-            // 9. Kamera Takibi & Ekran Sarsıntısı
+            // 9. Aktif Ajanlar Portre Paneli & Kamera Takibi
             try {
+                this.updateActiveAgentsUI();
                 this.updateCamera(dt);
             } catch (errCam) {
-                console.warn('[GameLoop Recovery] Kamera hatası:', errCam);
+                console.warn('[GameLoop Recovery] Kamera veya Portre Paneli hatası:', errCam);
             }
 
             // 10. WebGL Render
