@@ -95,11 +95,11 @@ export class BiologicalTieFighter {
                     engineGlowLight.position.set(0, 0, -2.6);
                     this.shipGroup.add(engineGlowLight);
 
-                    // 3D Biyolojik Sinek Pilotunu kokpite inşa et
-                    this.buildFlyPilot();
+                    // 3D Stormtrooper Kaskı Entegrasyonu (GLTFLoader Prefab clone)
+                    this.attachStormtrooperHelmet();
 
                     this.isLoaded = true;
-                    console.log('[TIE Fighter] ✓ GLTF Model (Lüks Gunmetal Metalik) & Biyolojik Sinek Kokpiti Hazır!');
+                    console.log('[TIE Fighter] ✓ GLTF Model & 3D Stormtrooper Kaskı Hazır!');
                     resolve();
                 },
                 undefined,
@@ -111,112 +111,16 @@ export class BiologicalTieFighter {
         });
     }
 
-    buildFlyPilot() {
-        // Kokpitin tam ortası
-        this.flyGroup.position.set(0, -0.15, 0.1);
-        this.flyGroup.scale.set(0.78, 0.78, 0.78);
-
-        // Kokpit içi yumuşak aydınlatma: Sinek pilotunun vücudunu ve kanatlarını aydınlatır
-        const cockpitLight = new THREE.PointLight(0xe0f2fe, 2.0, 10);
-        cockpitLight.position.set(0, 0.6, 0.5);
-        this.flyGroup.add(cockpitLight);
-
-        // 1. Toraks (Göğüs)
-        const thoraxGeo = new THREE.SphereGeometry(0.7, 16, 16);
-        thoraxGeo.scale(1.0, 1.2, 1.5);
-        const thoraxMat = new THREE.MeshStandardMaterial({
-            color: 0x473322,
-            roughness: 0.4,
-            metalness: 0.25
-        });
-        const thorax = new THREE.Mesh(thoraxGeo, thoraxMat);
-        this.flyGroup.add(thorax);
-
-        // 2. Abdomen (Karın - Çizgili Chitin)
-        const abdomenGeo = new THREE.SphereGeometry(0.85, 16, 16);
-        abdomenGeo.scale(0.9, 0.9, 1.8);
-        const abdomenMat = new THREE.MeshStandardMaterial({
-            color: 0x6b4e33,
-            roughness: 0.35
-        });
-        const abdomen = new THREE.Mesh(abdomenGeo, abdomenMat);
-        abdomen.position.set(0, -0.3, -1.6);
-        abdomen.rotation.x = -0.2;
-        this.flyGroup.add(abdomen);
-
-        // 3. Baş & 750 Ommatidia Kırmızı Bileşik Gözler
-        const headGeo = new THREE.SphereGeometry(0.55, 16, 16);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0x1f1712 });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.set(0, 0.25, 1.3);
-        this.flyGroup.add(head);
-
-        // Parlak Kırmızı Bileşik Gözler (Bileşik Göz / Ommatidia)
-        const eyeGeo = new THREE.SphereGeometry(0.38, 16, 16);
-        eyeGeo.scale(1.0, 1.3, 1.1);
-        const eyeMat = new THREE.MeshStandardMaterial({
-            color: 0xee1111,
-            emissive: 0x880000,
-            roughness: 0.2,
-            metalness: 0.5
-        });
-
-        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        leftEye.position.set(-0.38, 0.35, 1.4);
-        leftEye.rotation.set(0, -0.3, 0.2);
-        this.flyGroup.add(leftEye);
-
-        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-        rightEye.position.set(0.38, 0.35, 1.4);
-        rightEye.rotation.set(0, 0.3, -0.2);
-        this.flyGroup.add(rightEye);
-
-        // 4. Kanatlar (200 Hz ile Titreşen Yarı Saydam Chitin Kanatlar)
-        const wingShape = new THREE.Shape();
-        wingShape.moveTo(0, 0);
-        wingShape.quadraticCurveTo(1.2, 0.4, 2.5, 0.1);
-        wingShape.quadraticCurveTo(2.7, -0.4, 1.8, -0.7);
-        wingShape.quadraticCurveTo(0.6, -0.6, 0, 0);
-
-        const wingGeo = new THREE.ShapeGeometry(wingShape);
-        const wingMat = new THREE.MeshStandardMaterial({
-            color: 0xccf0ff,
-            opacity: 0.65,
-            transparent: true,
-            roughness: 0.2,
-            metalness: 0.1,
-            side: THREE.DoubleSide
-        });
-
-        // Sol Kanat Pivotu
-        this.leftWingPivot.position.set(-0.5, 0.6, 0.2);
-        const leftWingMesh = new THREE.Mesh(wingGeo, wingMat);
-        leftWingMesh.rotation.set(-Math.PI / 2, 0, Math.PI * 0.9);
-        this.leftWingPivot.add(leftWingMesh);
-        this.flyGroup.add(this.leftWingPivot);
-
-        // Sağ Kanat Pivotu
-        this.rightWingPivot.position.set(0.5, 0.6, 0.2);
-        const rightWingMesh = new THREE.Mesh(wingGeo, wingMat);
-        rightWingMesh.rotation.set(-Math.PI / 2, 0, Math.PI * 0.1);
-        rightWingMesh.scale.set(-1, 1, 1);
-        this.rightWingPivot.add(rightWingMesh);
-        this.flyGroup.add(this.rightWingPivot);
-
-        // 5. Mini Nöral Hologram (Sineğin kafasının üstünde süzülen 3D hologram)
-        const holoGeo = new THREE.IcosahedronGeometry(0.35, 1);
-        const holoMat = new THREE.MeshBasicMaterial({
-            color: 0x38bdf8,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.85
-        });
-        const miniBrain = new THREE.Mesh(holoGeo, holoMat);
-        this.miniBrainHologram.position.set(0, 1.2, 1.2);
-        this.miniBrainHologram.add(miniBrain);
-        this.flyGroup.add(this.miniBrainHologram);
-
-        this.shipGroup.add(this.flyGroup);
+    attachStormtrooperHelmet() {
+        const helmetPrefab = (typeof window !== 'undefined' ? window.stormtrooperHelmetPrefab : null);
+        if (helmetPrefab && this.tieMesh) {
+            const helmet = helmetPrefab.clone(true);
+            helmet.name = 'stormtrooper_helmet_pilot';
+            helmet.scale.set(1.4, 1.4, 1.4);
+            helmet.position.set(0, 0.25, 0.55);
+            helmet.rotation.set(0, 0, 0);
+            this.tieMesh.add(helmet);
+        }
     }
 
     update(shipData, flyData, neuralData) {
@@ -230,11 +134,6 @@ export class BiologicalTieFighter {
         this.shipGroup.rotation.x = -shipData.pitch;  // Pitch
         this.shipGroup.rotation.y = -shipData.yaw;    // Yaw
 
-        // 3. Kanat Hareketi (200 Hz Kanat Çırpma & Asimetri)
-        if (flyData) {
-            this.leftWingPivot.rotation.z = flyData.wing_l;
-            this.rightWingPivot.rotation.z = -flyData.wing_r;
-        }
 
         // 4. Mini Hologram Parlaması & Dönüşü
         this.miniBrainHologram.rotation.y += 0.03;

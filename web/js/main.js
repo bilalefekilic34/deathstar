@@ -12,18 +12,23 @@
  */
 
 import * as THREE from 'three';
-import { SpacewarsTrench } from './spacewars_trench.js?v=6.0';
-import { HeroXWing } from './hero_x_wing.js?v=9.0';
-import { ExhaustPort } from './exhaust_port.js?v=6.0';
-import { NeuralHologram } from './neural_hologram.js?v=6.0';
-import { ProtonTorpedoSystem } from './proton_torpedoes.js?v=6.0';
-import { DeathStarStation } from './death_star.js?v=6.0';
-import { StarfieldSystem } from './starfield.js?v=6.0';
-import { EnemyTieSquadron } from './enemy_tie_squadron.js?v=9.0';
-import { DirectorMode } from './director_mode.js?v=9.0';
-import { VideoRecorder } from './video_recorder.js?v=1.0';
+import { SpacewarsTrench } from './spacewars_trench.js?v=10.0';
+import { HeroXWing } from './hero_x_wing.js?v=10.0';
+import { ExhaustPort } from './exhaust_port.js?v=10.0';
+import { NeuralHologram } from './neural_hologram.js?v=10.0';
+import { ProtonTorpedoSystem } from './proton_torpedoes.js?v=10.0';
+import { DeathStarStation } from './death_star.js?v=10.0';
+import { StarfieldSystem } from './starfield.js?v=10.0';
+import { EnemyTieSquadron } from './enemy_tie_squadron.js?v=10.0';
+import { DirectorMode } from './director_mode.js?v=10.0';
+import { VideoRecorder } from './video_recorder.js?v=10.0';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 window.THREE = THREE;
+
+// Global Stormtrooper Kaskı Prefab Değişkeni (Performans için tek seferlik önbellek)
+export let stormtrooperHelmetPrefab = null;
+window.stormtrooperHelmetPrefab = null;
 
 class SpacewarsSimulation {
     constructor() {
@@ -322,6 +327,7 @@ class SpacewarsSimulation {
             { name: 'Trench Modülleri & Terminus', task: () => this.trench.init() },
             { name: 'Kahraman X-Wing (Red Five) & Biyo-Pilot', task: () => this.heroXWing.init() },
             { name: 'Düşman İmparatorluk TIE Filosu', task: () => this.enemyTieSquadron.init() },
+            { name: 'Stormtrooper Pilot Kaskı Prefab', task: () => this.loadStormtrooperHelmet() },
             { name: 'Termal Egzoz Çukuru', task: () => this.exhaustPort.init() },
             { name: '3D Sinek Beyni Hologramı', task: () => this.hologram.init() },
             { name: 'Death Star İstasyonu', task: () => this.deathStar.init() }
@@ -368,7 +374,83 @@ class SpacewarsSimulation {
             }
         }
 
-        console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı) hazırlandı!');
+        console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı, Stormtrooper Kaskı) hazırlandı!');
+    }
+
+    /**
+     * 1. Stormtrooper Kaskı Modelinin Yüklenmesi (GLTFLoader):
+     * Model referansı: https://sketchfab.com/3d-models/stormtrooper-helmet-star-wars-e7e34690434642f887dd170cd994f6fd
+     * Oyunun başlangıcında sadece BİR KEZ yüklenir ve stormtrooperHelmetPrefab değişkeninde tutulur.
+     * Materyal: İkonik parlak beyaz zırh için roughness: 0.20, color: 0xffffff zorlanır.
+     */
+    async loadStormtrooperHelmet() {
+        return new Promise((resolve) => {
+            const loader = new GLTFLoader();
+            loader.load(
+                '/models/stormtrooper_helmet.glb',
+                (gltf) => {
+                    const helmet = gltf.scene;
+                    const targetEnv = this.envMap || this.scene.environment;
+
+                    // Stormtrooper kaskı PBR materyalleri (Orijinal yüksek çözünürlüklü doku haritasını ve detayları koru)
+                    helmet.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            if (child.material) {
+                                child.material.roughness = 0.18;
+                                child.material.metalness = 0.18;
+                                if (targetEnv) {
+                                    child.material.envMap = targetEnv;
+                                    child.material.envMapIntensity = 1.5;
+                                }
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+
+                    stormtrooperHelmetPrefab = helmet;
+                    window.stormtrooperHelmetPrefab = helmet;
+                    this.stormtrooperHelmetPrefab = helmet;
+
+                    console.log('[Stormtrooper] ✓ Gerçek 3D Stormtrooper Kaskı Prefab (/models/stormtrooper_helmet.glb) Başarıyla Yüklendi ve Hazırlandı!');
+                    resolve(helmet);
+                },
+                undefined,
+                (err) => {
+                    console.warn('[Stormtrooper] Kask yükleme uyarısı:', err);
+                    resolve(null);
+                }
+            );
+        });
+    }
+
+    /**
+     * 2. TIE Fighter'a Stormtrooper Kaskı Entegrasyonu (Object3D Grouping / Parenting)
+     * Klonlanan kask doğrudan TIE Fighter'ın ana model grubuna eklenir (tieFighterModel.add(helmet)).
+     * Böylece kask; geminin tüm 6-DoF hareketlerini, ivmelenmesini ve Giant Fiber fıçı tonosunu otomatik miras alır.
+     */
+    attachStormtrooperHelmet(tieFighterModel) {
+        const prefab = stormtrooperHelmetPrefab || window.stormtrooperHelmetPrefab || this.stormtrooperHelmetPrefab;
+        if (!prefab || !tieFighterModel) return null;
+
+        const helmet = prefab.clone(true);
+        helmet.name = 'stormtrooper_pilot_helmet';
+
+        // 3. Pozisyon, Ölçek ve Rotasyon Kalibrasyonu:
+        // Kokpit merkezine tam oturur, uniform küçültülür ve kaçan X-Wing'e (+Z) bakar
+        helmet.scale.set(1.4, 1.4, 1.4);
+        helmet.position.set(0, 0.35, 1.05);
+        helmet.rotation.set(0, 0, 0); // Doğrudan +Z yönüne bakar
+
+        tieFighterModel.add(helmet);
+
+        // Kokpit içi yumuşak aydınlatma: Kaskın beyaz zırhını ve siyah vizörünü parlakça aydınlatır
+        const cockpitLight = new THREE.PointLight(0xffffff, 3.5, 6.0);
+        cockpitLight.position.set(0, 0.8, 1.5);
+        tieFighterModel.add(cockpitLight);
+
+        return helmet;
     }
 
     /**
@@ -982,15 +1064,18 @@ class SpacewarsSimulation {
                 child.receiveShadow = true;
                 const name = (child.name || '').toLowerCase();
 
-                // Düzgün normaller hesaplama
+                // Düzgün normaller hesaplama ve vertex color temizliği
                 if (child.geometry) {
                     if (child.geometry.index) {
                         child.geometry = child.geometry.toNonIndexed();
                     }
+                    if (child.geometry.attributes.color) {
+                        child.geometry.deleteAttribute('color');
+                    }
                     child.geometry.computeVertexNormals();
                 }
 
-                // 1. Şeffaf kokpit camını koru (Biyo-sinek pilotun net görünmesi için)
+                // 1. Şeffaf kokpit camı
                 if (name.includes('glass') || name.includes('canopy')) {
                     child.material = new THREE.MeshStandardMaterial({
                         color: 0x93c5fd,
@@ -1005,44 +1090,34 @@ class SpacewarsSimulation {
                     return;
                 }
 
-                // 2. Biyolojik sinek pilotu organlarını koru
-                if (name.includes('eye') || name.includes('thorax') || name.includes('abdomen') ||
-                    name.includes('wing_fly') || name.includes('holo')) {
-                    return;
-                }
-
-                // 3. İkonik Red Five kırmızı filo vurguları / şeritleri
-                if (name.includes('stripe') || name.includes('intake') || name.includes('ring')) {
+                // 2. İkonik Red Five kırmızı filo şeritleri (Crimson Stripes)
+                if (name.includes('stripe')) {
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0xef4444,
-                        emissive: 0xb91c1c,
-                        emissiveIntensity: 0.85,
-                        roughness: 0.32,
-                        metalness: 0.55,
-                        envMap: targetEnv,
-                        envMapIntensity: 1.4
-                    });
-                    return;
-                }
-
-                // 4. İyon Motoru Egzozları
-                if (name.includes('engine') || name.includes('glow')) {
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0x110000,
-                        emissive: 0xff4500,
-                        emissiveIntensity: 3.5,
-                        roughness: 0.20,
-                        metalness: 0.85,
+                        color: 0xc52222,
+                        roughness: 0.30,
+                        metalness: 0.35,
                         envMap: targetEnv,
                         envMapIntensity: 1.2
                     });
                     return;
                 }
 
-                // 5. Taim & Bak Lazer Namluları
-                if (name.includes('cannon') || name.includes('barrel') || name.includes('probe')) {
+                // 3. İyon Motoru Egzoz Parlaması (Yalnızca nozül içi iyon alevi)
+                if (name.includes('glow')) {
                     child.material = new THREE.MeshStandardMaterial({
-                        color: 0x1e293b,
+                        color: 0x110000,
+                        emissive: 0xff3700,
+                        emissiveIntensity: 3.5,
+                        roughness: 0.20,
+                        metalness: 0.85
+                    });
+                    return;
+                }
+
+                // 4. Lazer Namluları, Nozzle ve Mekanik Parçalar
+                if (name.includes('cannon') || name.includes('barrel') || name.includes('probe') || name.includes('nozzle') || name.includes('fan') || name.includes('dorsal')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x242a35,
                         roughness: 0.25,
                         metalness: 0.90,
                         envMap: targetEnv,
@@ -1051,7 +1126,7 @@ class SpacewarsSimulation {
                     return;
                 }
 
-                // 6. Ana Gövde ve Kanatlar (TIE Fighter referansı, koyu çelik yerine kırık beyaz/platin #e8eaed)
+                // 5. Ana Gövde, Kanatlar ve Motor Gövdeleri (TIE Fighter referansı, saf platin beyaz durasteel #e8eaed)
                 child.material = new THREE.MeshStandardMaterial({
                     color: 0xe8eaed,
                     roughness: 0.22,

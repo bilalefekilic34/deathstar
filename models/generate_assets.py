@@ -439,13 +439,13 @@ def create_dark_x_wing():
     """
     scene = trimesh.Scene()
     
-    # Renk Paletleri
-    c_hull_dark = [24, 28, 34, 255]       # Koyu mat karbon gövde
-    c_hull_metal = [55, 62, 72, 255]      # Silah metali / mekanik parçalar
-    c_orange = [234, 88, 12, 255]         # İkonik Dark X-Wing yarış turuncusu
+    # Renk Paletleri (Rebel Alliance T-65B Red Five - Platin Beyaz Durasteel & Kırmızı Filo Vurguları)
+    c_hull_white = [232, 234, 237, 255]   # Parlak platin beyaz durasteel gövde (#e8eaed)
+    c_hull_metal = [64, 72, 85, 255]      # Koyu durasteel silah metali / mekanik parçalar
+    c_red_five = [195, 34, 34, 255]       # İkonik Red Five kırmızı filo şeritleri (#c32222)
     c_glass = [140, 195, 245, 120]        # Şeffaf kokpit camı
-    c_engine_glow = [255, 80, 20, 255]    # Parlak turuncu iyon alevi
-    c_droid_silver = [200, 210, 225, 255] # Astromech droid kubbesi
+    c_engine_glow = [255, 69, 0, 255]     # Nozzle arkası itiş plazması
+    c_droid_silver = [210, 220, 235, 255] # Astromech droid kubbesi (R2-D2)
     
     # 1. ANA GÖVDE (FUSELAGE)
     nose_body = trimesh.creation.box([1.7, 1.1, 4.6])
@@ -455,7 +455,7 @@ def create_dark_x_wing():
     v[:, 1] *= factor
     nose_body.vertices = v
     nose_body.apply_translation([0, 0, 3.8])
-    nose_body.visual.face_colors = c_hull_dark
+    nose_body.visual.face_colors = c_hull_white
     scene.add_geometry(nose_body, node_name="nose_body")
     
     nose_stripe = trimesh.creation.box([0.38, 0.05, 4.2])
@@ -464,7 +464,7 @@ def create_dark_x_wing():
     v_s[:, 0] *= f_s
     nose_stripe.vertices = v_s
     nose_stripe.apply_translation([0, 0.54, 3.8])
-    nose_stripe.visual.face_colors = c_orange
+    nose_stripe.visual.face_colors = c_red_five
     scene.add_geometry(nose_stripe, node_name="nose_stripe")
     
     probe = trimesh.creation.cylinder(radius=0.06, height=0.9)
@@ -474,18 +474,18 @@ def create_dark_x_wing():
     
     mid_body = trimesh.creation.box([2.1, 1.35, 3.0])
     mid_body.apply_translation([0, 0, 0.0])
-    mid_body.visual.face_colors = c_hull_dark
+    mid_body.visual.face_colors = c_hull_white
     scene.add_geometry(mid_body, node_name="mid_fuselage")
     
     for side in [-1, 1]:
         vent = trimesh.creation.box([0.15, 0.5, 2.4])
         vent.apply_translation([side * 1.1, 0.1, 0.0])
-        vent.visual.face_colors = c_orange
+        vent.visual.face_colors = c_red_five
         scene.add_geometry(vent, node_name=f"fuselage_side_panel_{side}")
         
     aft_body = trimesh.creation.box([2.4, 1.5, 2.9])
     aft_body.apply_translation([0, 0, -2.95])
-    aft_body.visual.face_colors = c_hull_dark
+    aft_body.visual.face_colors = c_hull_white
     scene.add_geometry(aft_body, node_name="aft_fuselage")
     
     dorsal_spine = trimesh.creation.box([0.7, 0.35, 4.8])
@@ -544,11 +544,11 @@ def create_dark_x_wing():
                 wv[idx, 1] *= 0.85
         wing_plate.vertices = wv
         wing_plate.apply_translation([2.5 + 0.8, 0, -1.8])
-        wing_plate.visual.face_colors = c_hull_dark
+        wing_plate.visual.face_colors = c_hull_white
         
         wing_stripe = trimesh.creation.box([4.2, 0.16, 0.35])
         wing_stripe.apply_translation([2.5 + 0.9, 0, -1.2])
-        wing_stripe.visual.face_colors = c_orange
+        wing_stripe.visual.face_colors = c_red_five
         
         wing_mesh = trimesh.util.concatenate([wing_plate, wing_stripe])
         
@@ -561,7 +561,7 @@ def create_dark_x_wing():
         wing_mesh.apply_translation([0, side_y * 0.35, 0])
         scene.add_geometry(wing_mesh, node_name=f"sfoil_wing_{name}")
         
-    # 5. 4 ADET TÜRBİN MOTORU
+    # 5. 4 ADET TÜRBİN MOTORU (Platin Beyaz Durasteel Gövdeler & Kırmızı Vurgu Halkaları)
     engine_coords = [
         ("tl", -1.45,  0.85),
         ("bl", -1.45, -0.85),
@@ -572,12 +572,12 @@ def create_dark_x_wing():
     for idx, (ename, ex, ey) in enumerate(engine_coords):
         eng_cyl = trimesh.creation.cylinder(radius=0.55, height=3.4)
         eng_cyl.apply_translation([ex, ey, -2.6])
-        eng_cyl.visual.face_colors = c_hull_dark
+        eng_cyl.visual.face_colors = c_hull_white
         scene.add_geometry(eng_cyl, node_name=f"engine_cyl_{ename}")
         
         eng_ring = trimesh.creation.cylinder(radius=0.62, height=0.4)
         eng_ring.apply_translation([ex, ey, -0.9])
-        eng_ring.visual.face_colors = c_orange
+        eng_ring.visual.face_colors = c_red_five
         scene.add_geometry(eng_ring, node_name=f"engine_intake_{ename}")
         
         fan_cone = trimesh.creation.cone(radius=0.35, height=0.5)
@@ -595,7 +595,7 @@ def create_dark_x_wing():
         glow_core.visual.face_colors = c_engine_glow
         scene.add_geometry(glow_core, node_name=f"engine_glow_{idx}")
         
-    # 6. 4 ADET KANAT UCU LAZER TOPU
+    # 6. 4 ADET KANAT UCU LAZER TOPU (Taim & Bak KX9)
     cannon_coords = [
         (0, -6.1,  1.8),
         (1, -6.1, -1.8),
@@ -606,12 +606,12 @@ def create_dark_x_wing():
     for c_id, cx, cy in cannon_coords:
         c_body = trimesh.creation.cylinder(radius=0.22, height=2.2)
         c_body.apply_translation([cx, cy, -2.7])
-        c_body.visual.face_colors = c_hull_dark
+        c_body.visual.face_colors = c_hull_metal
         scene.add_geometry(c_body, node_name=f"laser_body_{c_id}")
         
         c_ring = trimesh.creation.cylinder(radius=0.26, height=0.35)
         c_ring.apply_translation([cx, cy, -1.7])
-        c_ring.visual.face_colors = c_orange
+        c_ring.visual.face_colors = c_red_five
         scene.add_geometry(c_ring, node_name=f"laser_ring_{c_id}")
         
         barrel = trimesh.creation.cylinder(radius=0.08, height=6.4)
@@ -621,7 +621,7 @@ def create_dark_x_wing():
         
         muzzle = trimesh.creation.cylinder(radius=0.14, height=0.45)
         muzzle.apply_translation([cx, cy, 4.95])
-        muzzle.visual.face_colors = [255, 60, 20, 255]
+        muzzle.visual.face_colors = c_hull_metal
         scene.add_geometry(muzzle, node_name=f"laser_cannon_{c_id}")
 
     out_path = os.path.join(MODELS_DIR, "dark_x_wing.glb")

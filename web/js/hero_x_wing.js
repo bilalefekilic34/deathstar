@@ -21,9 +21,6 @@ export class HeroXWing {
         this.scene.add(this.shipGroup);
 
         this.xWingMesh = null;
-        this.flyGroup = new THREE.Group();
-        this.flyGroup.name = 'drosophila_pilot';
-        this.shipGroup.add(this.flyGroup);
 
         this.leftWingMesh = null;
         this.rightWingMesh = null;
@@ -67,15 +64,18 @@ export class HeroXWing {
                             child.receiveShadow = true;
                             const name = (child.name || '').toLowerCase();
 
-                            // Düzgün normaller ve yansıma hesaplaması
+                            // Düzgün normaller ve yansıma hesaplaması, vertex color silinmesi
                             if (child.geometry) {
                                 if (child.geometry.index) {
                                     child.geometry = child.geometry.toNonIndexed();
                                 }
+                                if (child.geometry.attributes.color) {
+                                    child.geometry.deleteAttribute('color');
+                                }
                                 child.geometry.computeVertexNormals();
                             }
 
-                            // 1. Şeffaf Kokpit Camı (TIE Fighter ile birebir aynı: biyo-sinek pilot net görünsün)
+                            // 1. Şeffaf Kokpit Camı
                             if (name.includes('glass') || name.includes('canopy')) {
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0x93c5fd,
@@ -86,40 +86,38 @@ export class HeroXWing {
                                     depthWrite: false
                                 });
                             }
-                            // 2. İkonik Red Five Kırmızı Filo Şeritleri / Vurguları
-                            else if (name.includes('stripe') || name.includes('intake') || name.includes('ring')) {
+                            // 2. İkonik Red Five Kırmızı Filo Şeritleri (Nose & Wing Crimson Stripes)
+                            else if (name.includes('stripe')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xef4444,
-                                    emissive: 0xb91c1c,
-                                    emissiveIntensity: 0.85,
-                                    roughness: 0.32,
-                                    metalness: 0.55,
+                                    color: 0xc52222,
+                                    roughness: 0.30,
+                                    metalness: 0.35,
                                     envMap: targetEnv,
-                                    envMapIntensity: 1.4
+                                    envMapIntensity: 1.2
                                 });
                             }
-                            // 3. İyon Motor Egzozları
-                            else if (name.includes('engine') || name.includes('glow')) {
+                            // 3. İyon Motor Egzoz Parlaması (Yalnızca nozül içi iyon plazması)
+                            else if (name.includes('glow')) {
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0x110000,
-                                    emissive: 0xff4500,
+                                    emissive: 0xff3700,
                                     emissiveIntensity: 3.5,
                                     roughness: 0.20,
                                     metalness: 0.85
                                 });
                             }
-                            // 4. Lazer Namluları
-                            else if (name.includes('cannon') || name.includes('barrel') || name.includes('probe')) {
+                            // 4. Lazer Namluları, Nozzle ve Mekanik Durasteel Parçalar
+                            else if (name.includes('cannon') || name.includes('barrel') || name.includes('probe') || name.includes('nozzle') || name.includes('fan') || name.includes('dorsal')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x1e293b,
+                                    color: 0x242a35,
                                     roughness: 0.25,
                                     metalness: 0.90,
                                     envMap: targetEnv,
                                     envMapIntensity: 1.8
                                 });
                             }
-                            // 5. Ana Gövde ve Kanat Zırhı: TIE Fighter metalik yapılandırmasının birebir aynısı,
-                            // koyu çelik rengi yerine kırık beyaz/platin (#e8eaed)
+                            // 5. Ana Gövde, Kanatlar ve Motor Gövdeleri: TIE Fighter metalik yapılandırmasının birebir aynısı,
+                            // saf kırık beyaz/platin (#e8eaed)
                             else {
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0xe8eaed,
@@ -149,11 +147,8 @@ export class HeroXWing {
                     this.shipGroup.add(engineGlow);
                     this.engineLights.push(engineGlow);
 
-                    // 3D Biyolojik Sinek Pilotunu kokpit içine yerleştir
-                    this.buildFlyPilot();
-
                     this.isLoaded = true;
-                    console.log('[HeroXWing] ✓ Kahraman X-Wing (Red Five) GLTF Modeli ve Biyo-Sinek Kokpiti Hazır!');
+                    console.log('[HeroXWing] ✓ Kahraman X-Wing (Red Five) GLTF Modeli Başarıyla Hazırlandı!');
                     resolve();
                 },
                 undefined,
@@ -165,83 +160,6 @@ export class HeroXWing {
         });
     }
 
-    buildFlyPilot() {
-        // Kokpitin tam içi: X-Wing kokpit merkezi (Z: 0.85, Y: 0.48)
-        this.flyGroup.position.set(0, 0.48, 0.85);
-        this.flyGroup.scale.set(0.42, 0.42, 0.42);
-
-        // 1. Toraks & Abdomen
-        const thoraxGeo = new THREE.SphereGeometry(0.7, 12, 12);
-        thoraxGeo.scale(1.0, 1.1, 1.4);
-        const thoraxMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.4 });
-        this.flyGroup.add(new THREE.Mesh(thoraxGeo, thoraxMat));
-
-        const abdomenGeo = new THREE.SphereGeometry(0.8, 12, 12);
-        abdomenGeo.scale(0.85, 0.85, 1.7);
-        const abdomenMat = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.35 });
-        const abdomen = new THREE.Mesh(abdomenGeo, abdomenMat);
-        abdomen.position.set(0, -0.25, -1.4);
-        abdomen.rotation.x = -0.15;
-        this.flyGroup.add(abdomen);
-
-        // 2. Baş & Kırmızı Petek Gözler (750 Ommatidia)
-        const headGeo = new THREE.SphereGeometry(0.5, 12, 12);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0x1f140e });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.set(0, 0.2, 1.1);
-        this.flyGroup.add(head);
-
-        const eyeGeo = new THREE.SphereGeometry(0.32, 10, 10);
-        eyeGeo.scale(1.0, 1.25, 1.1);
-        const eyeMat = new THREE.MeshStandardMaterial({
-            color: 0xff1e1e,
-            emissive: 0xbb0000,
-            roughness: 0.2,
-            metalness: 0.4
-        });
-
-        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        leftEye.position.set(-0.32, 0.3, 1.2);
-        this.flyGroup.add(leftEye);
-
-        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-        rightEye.position.set(0.32, 0.3, 1.2);
-        this.flyGroup.add(rightEye);
-
-        // 3. Kanatlar (200 Hz Asimetrik Strok Pivotları)
-        const wingShape = new THREE.Shape();
-        wingShape.moveTo(0, 0);
-        wingShape.quadraticCurveTo(1.0, 0.35, 2.2, 0.1);
-        wingShape.quadraticCurveTo(2.4, -0.35, 1.6, -0.6);
-        wingShape.quadraticCurveTo(0.5, -0.5, 0, 0);
-
-        const wingGeo = new THREE.ShapeGeometry(wingShape);
-        const wingMat = new THREE.MeshStandardMaterial({
-            color: 0xddf4ff,
-            opacity: 0.65,
-            transparent: true,
-            roughness: 0.2,
-            metalness: 0.1,
-            side: THREE.DoubleSide
-        });
-
-        const leftPivot = new THREE.Group();
-        leftPivot.position.set(-0.4, 0.5, 0.2);
-        this.leftWingMesh = new THREE.Mesh(wingGeo, wingMat);
-        this.leftWingMesh.rotation.set(-Math.PI / 2, 0, Math.PI * 0.9);
-        leftPivot.add(this.leftWingMesh);
-        this.flyGroup.add(leftPivot);
-        this.leftWingPivot = leftPivot;
-
-        const rightPivot = new THREE.Group();
-        rightPivot.position.set(0.4, 0.5, 0.2);
-        this.rightWingMesh = new THREE.Mesh(wingGeo, wingMat);
-        this.rightWingMesh.rotation.set(-Math.PI / 2, 0, -Math.PI * 0.9);
-        this.rightWingMesh.scale.set(-1, 1, 1);
-        rightPivot.add(this.rightWingMesh);
-        this.flyGroup.add(rightPivot);
-        this.rightWingPivot = rightPivot;
-    }
 
     initExplosionParticles() {
         const palette = [0xff4400, 0xff8800, 0xff0033, 0xef4444, 0x242e3d, 0xffffff];
@@ -362,17 +280,7 @@ export class HeroXWing {
         this.shipGroup.rotation.x = -shipData.pitch;  // Pitch
         this.shipGroup.rotation.y = -shipData.yaw;    // Yaw
 
-        // Biyo-pilot sinek kanat çırpma animasyonu (200 Hz yüksek hızlı kanat kinematiği)
-        if (typeof flyDataOrDt === 'object' && flyDataOrDt !== null) {
-            if (this.leftWingPivot) this.leftWingPivot.rotation.z = flyDataOrDt.wing_l;
-            if (this.rightWingPivot) this.rightWingPivot.rotation.z = -flyDataOrDt.wing_r;
-        } else {
-            const wingFreq = 200.0;
-            const time = performance.now() * 0.001;
-            const strokeAngle = Math.sin(time * wingFreq * 0.06) * 0.45;
-            if (this.leftWingPivot) this.leftWingPivot.rotation.z = strokeAngle;
-            if (this.rightWingPivot) this.rightWingPivot.rotation.z = -strokeAngle;
-        }
+
 
         // Bounding Box güncelle
         this.collisionBox.setFromObject(this.shipGroup);

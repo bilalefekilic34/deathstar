@@ -111,14 +111,15 @@ export class EnemyTieSquadron {
                             child.receiveShadow = true;
                             const name = (child.name || '').toLowerCase();
 
-                            // 1. Şeffaf Kokpit Camı (Biyo-pilot sinek net görünsün)
+                            // 1. Ultra-Şeffaf Kokpit Camı (İçindeki 3D Stormtrooper Kaskı kristal netliğinde görünsün)
                             if (name.includes('glass') || name.includes('canopy')) {
-                                child.material = new THREE.MeshStandardMaterial({
+                                child.material = new THREE.MeshPhysicalMaterial({
                                     color: 0x93c5fd,
-                                    opacity: 0.22,
+                                    transmission: 0.92,
+                                    opacity: 0.10,
                                     transparent: true,
-                                    roughness: 0.08,
-                                    metalness: 0.15,
+                                    roughness: 0.05,
+                                    metalness: 0.10,
                                     depthWrite: false
                                 });
                             }
@@ -178,8 +179,24 @@ export class EnemyTieSquadron {
         const shipMesh = this.masterTemplate.clone(true);
         group.add(shipMesh);
 
-        // 3D Drosophila Sinek Pilotunu TIE kokpiti içine yerleştir
-        const flyRig = this.buildFlyPilot(group);
+        // 2. Gerçek 3D Stormtrooper Kaskı Entegrasyonu (Object3D Grouping / Parenting)
+        // Doğrudan TIE Fighter'ın ana model grubuna eklenir (shipMesh.add(helmet))
+        const helmetPrefab = (typeof window !== 'undefined' ? window.stormtrooperHelmetPrefab : null);
+        if (helmetPrefab) {
+            const helmet = helmetPrefab.clone(true);
+            helmet.name = `stormtrooper_helmet_${agentId}`;
+            // 3. Pozisyon, Ölçek ve Rotasyon Ayarları:
+            // Kokpit merkezine tam oturur, oranı bozulmadan uniform küçültülür, vizörü doğrudan kaçan X-Wing'e (+Z) bakar
+            helmet.scale.set(1.4, 1.4, 1.4);
+            helmet.position.set(0, 0.35, 1.05);
+            helmet.rotation.set(0, 0, 0); // X-Wing yönüne (+Z) bakar
+            shipMesh.add(helmet);
+
+            // Kokpit içi yumuşak aydınlatma: Kaskın beyaz zırhını ve siyah vizörünü camın arkasından ışıldatır
+            const cockpitLight = new THREE.PointLight(0xffffff, 3.5, 6.0);
+            cockpitLight.position.set(0, 0.8, 1.5);
+            shipMesh.add(cockpitLight);
+        }
 
         group.position.set(spawnData.x, spawnData.y, spawnData.z);
         this.scene.add(group);
@@ -187,7 +204,6 @@ export class EnemyTieSquadron {
         const instance = {
             id: agentId,
             group: group,
-            flyRig: flyRig,
             hp: 1,
             isAlive: true,
             lastZ: spawnData.z,
@@ -195,93 +211,8 @@ export class EnemyTieSquadron {
         };
 
         this.activeEnemies.set(agentId, instance);
-        console.log(`[EnemyTieSquadron] 👾 Sahneye Yeni Biyolojik Pilotlu Düşman TIE Fighter Eklendi: ${agentId}`);
+        console.log(`[EnemyTieSquadron] 👾 Sahneye Yeni Stormtrooper Pilotlu Düşman TIE Fighter Eklendi: ${agentId}`);
         return instance;
-    }
-
-    buildFlyPilot(parentGroup) {
-        const flyGroup = new THREE.Group();
-        // Kokpitin tam içi: TIE Fighter kokpit merkezi (Z: 0.0, Y: 0.0)
-        flyGroup.position.set(0, 0.0, 0.1);
-        flyGroup.scale.set(0.38, 0.38, 0.38);
-
-        // 1. Toraks & Abdomen
-        const thoraxGeo = new THREE.SphereGeometry(0.7, 12, 12);
-        thoraxGeo.scale(1.0, 1.1, 1.4);
-        const thoraxMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.4 });
-        flyGroup.add(new THREE.Mesh(thoraxGeo, thoraxMat));
-
-        const abdomenGeo = new THREE.SphereGeometry(0.8, 12, 12);
-        abdomenGeo.scale(0.85, 0.85, 1.7);
-        const abdomenMat = new THREE.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.35 });
-        const abdomen = new THREE.Mesh(abdomenGeo, abdomenMat);
-        abdomen.position.set(0, -0.25, -1.4);
-        abdomen.rotation.x = -0.15;
-        flyGroup.add(abdomen);
-
-        // 2. Baş & Kırmızı Petek Gözler (750 Ommatidia)
-        const headGeo = new THREE.SphereGeometry(0.5, 12, 12);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0x1f140e });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.set(0, 0.2, 1.1);
-        flyGroup.add(head);
-
-        const eyeGeo = new THREE.SphereGeometry(0.32, 10, 10);
-        eyeGeo.scale(1.0, 1.25, 1.1);
-        const eyeMat = new THREE.MeshStandardMaterial({
-            color: 0xff1e1e,
-            emissive: 0xbb0000,
-            roughness: 0.2,
-            metalness: 0.4
-        });
-
-        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        leftEye.position.set(-0.32, 0.3, 1.2);
-        flyGroup.add(leftEye);
-
-        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-        rightEye.position.set(0.32, 0.3, 1.2);
-        flyGroup.add(rightEye);
-
-        // 3. Kanatlar (200 Hz Asimetrik Strok Pivotları)
-        const wingShape = new THREE.Shape();
-        wingShape.moveTo(0, 0);
-        wingShape.quadraticCurveTo(1.0, 0.35, 2.2, 0.1);
-        wingShape.quadraticCurveTo(2.4, -0.35, 1.6, -0.6);
-        wingShape.quadraticCurveTo(0.5, -0.5, 0, 0);
-
-        const wingGeo = new THREE.ShapeGeometry(wingShape);
-        const wingMat = new THREE.MeshStandardMaterial({
-            color: 0xddf4ff,
-            opacity: 0.65,
-            transparent: true,
-            roughness: 0.2,
-            metalness: 0.1,
-            side: THREE.DoubleSide
-        });
-
-        const leftPivot = new THREE.Group();
-        leftPivot.position.set(-0.4, 0.5, 0.2);
-        const leftWing = new THREE.Mesh(wingGeo, wingMat);
-        leftWing.rotation.set(-Math.PI / 2, 0, Math.PI * 0.9);
-        leftPivot.add(leftWing);
-        flyGroup.add(leftPivot);
-
-        const rightPivot = new THREE.Group();
-        rightPivot.position.set(0.4, 0.5, 0.2);
-        const rightWing = new THREE.Mesh(wingGeo, wingMat);
-        rightWing.rotation.set(-Math.PI / 2, 0, Math.PI * 0.1);
-        rightWing.scale.set(-1, 1, 1);
-        rightPivot.add(rightWing);
-        flyGroup.add(rightPivot);
-
-        parentGroup.add(flyGroup);
-
-        return {
-            leftPivot: leftPivot,
-            rightPivot: rightPivot,
-            flyGroup: flyGroup
-        };
     }
 
     triggerTieExplosion(x, y, z, reason = 'hitbox_wall_crash') {
@@ -421,16 +352,7 @@ export class EnemyTieSquadron {
                 continue;
             }
 
-            // 200 Hz Sinek Kanat Çırpma & Asimetri
-            if (instance.flyRig) {
-                const wingFreq = 200.0;
-                const t = performance.now() * 0.001;
-                const baseStroke = Math.sin(t * wingFreq * 0.06) * 0.45;
-                const deltaPhi = (enemyData.delta_phi || 0.0) * 0.008;
 
-                instance.flyRig.leftPivot.rotation.z = baseStroke + deltaPhi;
-                instance.flyRig.rightPivot.rotation.z = -baseStroke + deltaPhi;
-            }
 
             // Sinek Göz Rengi (LC10a Av/Takip Uyarımı)
             const lc10a = enemyData.v_lc10a || -70.0;
