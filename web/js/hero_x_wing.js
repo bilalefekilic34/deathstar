@@ -58,77 +58,81 @@ export class HeroXWing {
                 (gltf) => {
                     this.xWingMesh = gltf.scene;
 
-                    // Red Five / Kahraman X-Wing PBR Materyalleri
+                    const targetEnv = this.scene?.environment || null;
+
+                    // Kahraman X-Wing (Red Five) - TIE Fighter Referanslı Metalik MeshStandardMaterial Konfigürasyonu
                     this.xWingMesh.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
                             const name = (child.name || '').toLowerCase();
 
-                            // 1. Şeffaf Kokpit Camı (Biyo-pilot sinek net görünsün)
+                            // Düzgün normaller ve yansıma hesaplaması
+                            if (child.geometry) {
+                                if (child.geometry.index) {
+                                    child.geometry = child.geometry.toNonIndexed();
+                                }
+                                child.geometry.computeVertexNormals();
+                            }
+
+                            // 1. Şeffaf Kokpit Camı (TIE Fighter ile birebir aynı: biyo-sinek pilot net görünsün)
                             if (name.includes('glass') || name.includes('canopy')) {
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0x93c5fd,
                                     opacity: 0.22,
                                     transparent: true,
-                                    roughness: 0.06,
+                                    roughness: 0.08,
                                     metalness: 0.15,
                                     depthWrite: false
                                 });
                             }
-                            // 2. İkonik Red Five Kırmızı / Turuncu Filo Şeritleri
-                            else if (name.includes('stripe') || name.includes('intake') || name.includes('panel') || name.includes('ring')) {
+                            // 2. İkonik Red Five Kırmızı Filo Şeritleri / Vurguları
+                            else if (name.includes('stripe') || name.includes('intake') || name.includes('ring')) {
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0xef4444,
                                     emissive: 0xb91c1c,
-                                    emissiveIntensity: 0.75,
-                                    roughness: 0.28,
-                                    metalness: 0.40
+                                    emissiveIntensity: 0.85,
+                                    roughness: 0.32,
+                                    metalness: 0.55,
+                                    envMap: targetEnv,
+                                    envMapIntensity: 1.4
                                 });
                             }
-                            // 3. 4x İyon İtiş Motor Egzoz Alevleri
-                            else if (name.includes('glow')) {
+                            // 3. İyon Motor Egzozları
+                            else if (name.includes('engine') || name.includes('glow')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xff3300,
+                                    color: 0x110000,
                                     emissive: 0xff4500,
-                                    emissiveIntensity: 4.5,
-                                    roughness: 0.10,
+                                    emissiveIntensity: 3.5,
+                                    roughness: 0.20,
                                     metalness: 0.85
                                 });
                             }
-                            // 4. Taim & Bak KX9 Titanyum Dörtlü Lazer Namluları
+                            // 4. Lazer Namluları
                             else if (name.includes('cannon') || name.includes('barrel') || name.includes('probe')) {
-                                child.material = new THREE.MeshPhysicalMaterial({
-                                    color: 0x242e3d,
-                                    roughness: 0.20,
-                                    metalness: 0.92,
-                                    clearcoat: 0.40
-                                });
-                            }
-                            // 5. Astromech Droid Gümüş Kubbesi (R2-D2)
-                            else if (name.includes('droid_head')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xe2e8f0,
-                                    roughness: 0.15,
-                                    metalness: 0.90
+                                    color: 0x1e293b,
+                                    roughness: 0.25,
+                                    metalness: 0.90,
+                                    envMap: targetEnv,
+                                    envMapIntensity: 1.8
                                 });
                             }
-                            else if (name.includes('sensor_eye')) {
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x00f0ff,
-                                    emissive: 0x00c8ff,
-                                    emissiveIntensity: 3.0
-                                });
-                            }
-                            // 6. Açık Durasteel Zırh Gövdesi (#cbd5e1 - Star Wars Klasik X-Wing Rengi)
+                            // 5. Ana Gövde ve Kanat Zırhı: TIE Fighter metalik yapılandırmasının birebir aynısı,
+                            // koyu çelik rengi yerine kırık beyaz/platin (#e8eaed)
                             else {
-                                child.material = new THREE.MeshPhysicalMaterial({
-                                    color: 0xd0d8e2,
-                                    roughness: 0.28,
-                                    metalness: 0.82,
-                                    clearcoat: 0.32,
-                                    clearcoatRoughness: 0.18
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: 0xe8eaed,
+                                    roughness: 0.22,
+                                    metalness: 0.88,
+                                    envMap: targetEnv,
+                                    envMapIntensity: 2.2,
+                                    side: THREE.DoubleSide
                                 });
+                            }
+
+                            if (child.material) {
+                                child.material.needsUpdate = true;
                             }
                         }
                     });
@@ -136,8 +140,8 @@ export class HeroXWing {
                     this.shipGroup.add(this.xWingMesh);
 
                     // X-Wing Gemi Aydınlatması (Specular & Engine Highlights)
-                    const shipTopLight = new THREE.PointLight(0xf1f5f9, 2.2, 18);
-                    shipTopLight.position.set(0, 3.8, 0);
+                    const shipTopLight = new THREE.PointLight(0xffffff, 2.5, 20);
+                    shipTopLight.position.set(0, 4.0, 0);
                     this.shipGroup.add(shipTopLight);
 
                     const engineGlow = new THREE.PointLight(0xff4500, 2.8, 12);

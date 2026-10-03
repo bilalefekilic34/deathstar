@@ -120,8 +120,12 @@ export class NeuralHologram {
     async init() {
         if (!this.container) return;
 
-        const w = this.container.clientWidth || 250;
-        const h = this.container.clientHeight || 200;
+        const w = 260;
+        const h = 210;
+        this.currentWidth = w;
+        this.currentHeight = h;
+        this.camera.aspect = w / h;
+        this.camera.updateProjectionMatrix();
         this.renderer.setSize(w, h);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -139,25 +143,6 @@ export class NeuralHologram {
         const rimMagentaLight = new THREE.DirectionalLight(0xff00aa, 1.8);
         rimMagentaLight.position.set(-15, -10, -15);
         this.scene.add(rimMagentaLight);
-
-        // Kutu Büyüdüğünde ve Küçüldüğünde Canvas Çözünürlüğünü Otomatik Güncelle (ResizeObserver)
-        if (window.ResizeObserver && this.container) {
-            this.resizeObserver = new ResizeObserver((entries) => {
-                for (const entry of entries) {
-                    const cr = entry.contentRect;
-                    if (cr.width > 0 && cr.height > 0) {
-                        const rw = Math.round(cr.width);
-                        const rh = Math.round(cr.height);
-                        this.currentWidth = rw;
-                        this.currentHeight = rh;
-                        this.camera.aspect = rw / rh;
-                        this.camera.updateProjectionMatrix();
-                        this.renderer.setSize(rw, rh, false);
-                    }
-                }
-            });
-            this.resizeObserver.observe(this.container);
-        }
 
         // 3D Sinek Beyni Modelini Yükle (/models/drosophila_brain.glb)
         await this.loadBrainModel();
@@ -506,18 +491,7 @@ export class NeuralHologram {
             this.brainGroup.rotation.x *= 0.96; // X ekseninde merkeze yumuşak dönüş
         }
 
-        // 4. Canvas Çözünürlüğünün ve En-Boy Oranının Korunması (Anti-Stretching Dynamic Sync)
-        const curW = this.container.clientWidth;
-        const curH = this.container.clientHeight;
-        if (curW > 0 && curH > 0 && (curW !== this.currentWidth || curH !== this.currentHeight)) {
-            this.currentWidth = curW;
-            this.currentHeight = curH;
-            this.camera.aspect = curW / curH;
-            this.camera.updateProjectionMatrix();
-            this.renderer.setSize(curW, curH, false);
-        }
-
-        // 5. Raycaster ile Yalnızca Bölgesel Nöropil Tespiti & Tooltip (Mesh Büyütme İptal Edildi)
+        // 4. Raycaster ile Yalnızca Bölgesel Nöropil Tespiti & Tooltip (CSS transform: scale kullanıldığı için canvas resize yapılmaz)
         let isHit = false;
         if (this.isLoaded && this.isMouseOverContainer) {
             this.raycaster.setFromCamera(this.mouse, this.camera);

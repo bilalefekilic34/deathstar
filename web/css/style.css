@@ -510,7 +510,7 @@ body, html {
     box-shadow: 0 0 14px rgba(251, 191, 36, 0.4);
 }
 
-/* 3D Sinek Beyni Hologramı ve Raycaster Tooltip Pop-up */
+/* 3D Sinek Beyni Hologramı ve Raycaster Tooltip Pop-up (GPU Hızlandırmalı CSS Scale) */
 #hologram-container {
     position: absolute;
     top: 104px;
@@ -527,16 +527,16 @@ body, html {
     box-shadow: 0 8px 32px rgba(0, 240, 255, 0.22), inset 0 0 15px rgba(0, 240, 255, 0.08);
     cursor: grab;
     z-index: 80;
-    transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                height 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-                border-color 0.35s ease,
-                background 0.35s ease,
-                box-shadow 0.35s ease;
+    transform-origin: top right;
+    will-change: transform;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.28s ease,
+                background 0.28s ease,
+                box-shadow 0.28s ease;
 }
 
 #hologram-container:hover {
-    width: 390px;   /* 260px * 1.5 = 390px (150% Genişlik) */
-    height: 315px;  /* 210px * 1.5 = 315px (150% Yükseklik) */
+    transform: scale(1.45);   /* GPU hızlandırmalı ölçeklendirme - JS canvas resize ve reflow tetiklemez */
     border-color: rgba(0, 240, 255, 0.85);
     background: rgba(11, 19, 32, 0.96);
     box-shadow: 0 16px 48px rgba(0, 240, 255, 0.45), inset 0 0 25px rgba(0, 240, 255, 0.16);

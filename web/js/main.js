@@ -338,9 +338,10 @@ class SpacewarsSimulation {
             })
         );
 
-        // 1. Kahraman X-Wing İçin Özelleştirilmiş Metalik PBR Materyalleri & Uzay envMap Yansıması
+        // 1. Kahraman X-Wing İçin Parlak Beyaz/Platin Metalik PBR Materyalleri & Uzay envMap Yansıması
         if (this.heroXWing) {
-            this.heroXWing.applyEnvMap(this.envMap);
+            this.applyMetallicXWingMaterials(this.heroXWing.xWingMesh || this.heroXWing.shipGroup);
+            this.heroXWing.applyEnvMap(this.envMap || this.scene.environment);
         }
 
         // 2. Siper (Trench) Modelleri İçin Açık Gri Metalik Kaplama & Mavi -> İmparatorluk Kırmızısı Vurgular
@@ -964,8 +965,111 @@ class SpacewarsSimulation {
      * - metalness: 0.85 - 0.88 (Yüksek yansıtıcılık)
      * - roughness: 0.35 - 0.40 (Işık parlamaları yüzeyde süzülsün)
      * - envMapIntensity: 1.8 (Belirgin metalik yansıma gücü)
-     * - Mavi detaylar/raylar/ışıklar: #ff2a2a İmparatorluk Kırmızısı
+    /**
+    /**
+     * Kahraman X-Wing (Red Five) Metalik Kırık Beyaz/Platin PBR Kaplama (TIE Fighter Referansı):
+     * TIE Fighter'ın çalışan MeshStandardMaterial, envMap, metalness (0.88) ve roughness (0.22)
+     * yapılandırması birebir kopyalanmış, renk kırık beyaz/platin (#e8eaed) olarak ayarlanmıştır.
+     * SADECE preloadAllAssets() aşamasında 1 KEZ asenkron çalışır, render döngüsünde asla çağrılmaz.
      */
+    applyMetallicXWingMaterials(model) {
+        if (!model) return;
+        const targetEnv = this.envMap || this.scene.environment;
+
+        model.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                const name = (child.name || '').toLowerCase();
+
+                // Düzgün normaller hesaplama
+                if (child.geometry) {
+                    if (child.geometry.index) {
+                        child.geometry = child.geometry.toNonIndexed();
+                    }
+                    child.geometry.computeVertexNormals();
+                }
+
+                // 1. Şeffaf kokpit camını koru (Biyo-sinek pilotun net görünmesi için)
+                if (name.includes('glass') || name.includes('canopy')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x93c5fd,
+                        opacity: 0.22,
+                        transparent: true,
+                        roughness: 0.08,
+                        metalness: 0.15,
+                        envMap: targetEnv,
+                        envMapIntensity: 0.8,
+                        depthWrite: false
+                    });
+                    return;
+                }
+
+                // 2. Biyolojik sinek pilotu organlarını koru
+                if (name.includes('eye') || name.includes('thorax') || name.includes('abdomen') ||
+                    name.includes('wing_fly') || name.includes('holo')) {
+                    return;
+                }
+
+                // 3. İkonik Red Five kırmızı filo vurguları / şeritleri
+                if (name.includes('stripe') || name.includes('intake') || name.includes('ring')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0xef4444,
+                        emissive: 0xb91c1c,
+                        emissiveIntensity: 0.85,
+                        roughness: 0.32,
+                        metalness: 0.55,
+                        envMap: targetEnv,
+                        envMapIntensity: 1.4
+                    });
+                    return;
+                }
+
+                // 4. İyon Motoru Egzozları
+                if (name.includes('engine') || name.includes('glow')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x110000,
+                        emissive: 0xff4500,
+                        emissiveIntensity: 3.5,
+                        roughness: 0.20,
+                        metalness: 0.85,
+                        envMap: targetEnv,
+                        envMapIntensity: 1.2
+                    });
+                    return;
+                }
+
+                // 5. Taim & Bak Lazer Namluları
+                if (name.includes('cannon') || name.includes('barrel') || name.includes('probe')) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x1e293b,
+                        roughness: 0.25,
+                        metalness: 0.90,
+                        envMap: targetEnv,
+                        envMapIntensity: 1.8
+                    });
+                    return;
+                }
+
+                // 6. Ana Gövde ve Kanatlar (TIE Fighter referansı, koyu çelik yerine kırık beyaz/platin #e8eaed)
+                child.material = new THREE.MeshStandardMaterial({
+                    color: 0xe8eaed,
+                    roughness: 0.22,
+                    metalness: 0.88,
+                    envMap: targetEnv,
+                    envMapIntensity: 2.2,
+                    side: THREE.DoubleSide
+                });
+
+                if (child.material) {
+                    child.material.needsUpdate = true;
+                }
+            }
+        });
+
+        console.log('[HeroXWing] ✨ X-Wing metalik kırık beyaz/platin (#e8eaed) kaplama TIE Fighter referansıyla uygulandı!');
+    }
+
     applyMetallicTrenchMaterials(model) {
         if (!model) return;
         model.traverse((child) => {
