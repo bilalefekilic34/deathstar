@@ -135,3 +135,5 @@ Trilogy Group: SpaceWars (GitHub)
 Sketchfab: TIE Fighter Models
 
 Sketchfab: Death Star Models
+
+Sketchfab: Stormtrooper Models
