@@ -22,8 +22,13 @@ import { StarfieldSystem } from './starfield.js?v=6.0';
 import { EnemyTieSquadron } from './enemy_tie_squadron.js?v=9.0';
 import { DirectorMode } from './director_mode.js?v=9.0';
 import { VideoRecorder } from './video_recorder.js?v=1.0';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 window.THREE = THREE;
+
+// Global Stormtrooper Kaskı Prefab Değişkeni (Performans için tek seferlik önbellek)
+export let stormtrooperHelmetPrefab = null;
+window.stormtrooperHelmetPrefab = null;
 
 class SpacewarsSimulation {
     constructor() {
@@ -322,6 +327,7 @@ class SpacewarsSimulation {
             { name: 'Trench Modülleri & Terminus', task: () => this.trench.init() },
             { name: 'Kahraman X-Wing (Red Five) & Biyo-Pilot', task: () => this.heroXWing.init() },
             { name: 'Düşman İmparatorluk TIE Filosu', task: () => this.enemyTieSquadron.init() },
+            { name: 'Stormtrooper Pilot Kaskı Prefab', task: () => this.loadStormtrooperHelmet() },
             { name: 'Termal Egzoz Çukuru', task: () => this.exhaustPort.init() },
             { name: '3D Sinek Beyni Hologramı', task: () => this.hologram.init() },
             { name: 'Death Star İstasyonu', task: () => this.deathStar.init() }
@@ -368,7 +374,106 @@ class SpacewarsSimulation {
             }
         }
 
-        console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı) hazırlandı!');
+        console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı, Stormtrooper Kaskı) hazırlandı!');
+    }
+
+    /**
+     * 2. Modelin Yüklenmesi ve Temizlenmesi (GLTFLoader):
+     * Model referansı: https://sketchfab.com/3d-models/stormtrooper-helmet-star-wars-e7e34690434642f887dd170cd994f6fd
+     * GLTFLoader ile '/models/stormtrooper_helmet.glb' asenkron olarak yüklenir.
+     * Traverse ile modeldeki gereksiz boyun/gövde parçaları taranır ve sadece kafa/kask mesh'i izole edilir.
+     * Elde edilen saf kask modeli global stormtrooperHelmetPrefab olarak kaydedilir.
+     */
+    async loadStormtrooperHelmet() {
+        return new Promise((resolve) => {
+            const loader = new GLTFLoader();
+            loader.load(
+                '/models/stormtrooper_helmet.glb',
+                (gltf) => {
+                    const scene = gltf.scene;
+                    let targetMesh = null;
+
+                    // Traverse ile kask dışındaki parçaları filtrele ve sadece kafa/kask mesh'ini bul
+                    scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            const name = (child.name || '').toLowerCase();
+                            if (!targetMesh || name.includes('helmet') || name.includes('head') || name.includes('mask')) {
+                                targetMesh = child;
+                            }
+                        }
+                    });
+
+                    // Sadece kafa mesh'ini izole ederek prefab oluştur
+                    const helmetPrefab = new THREE.Group();
+                    helmetPrefab.name = 'stormtrooper_helmet_prefab';
+
+                    if (targetMesh) {
+                        const isolatedMesh = targetMesh.clone();
+                        isolatedMesh.position.set(0, 0, 0);
+                        helmetPrefab.add(isolatedMesh);
+                    } else {
+                        helmetPrefab.add(scene.clone());
+                    }
+
+                    // PBR ve Çevre Yansıması optimizasyonu
+                    const targetEnv = this.envMap || this.scene.environment;
+                    helmetPrefab.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            if (targetEnv) {
+                                child.material.envMap = targetEnv;
+                                child.material.envMapIntensity = 1.4;
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+
+                    stormtrooperHelmetPrefab = helmetPrefab;
+                    window.stormtrooperHelmetPrefab = helmetPrefab;
+                    this.stormtrooperHelmetPrefab = helmetPrefab;
+
+                    console.log('[Stormtrooper] ✓ 3D Stormtrooper Kaskı Prefab (/models/stormtrooper_helmet.glb) Başarıyla Yüklendi ve Hazırlandı!');
+                    resolve(helmetPrefab);
+                },
+                undefined,
+                (err) => {
+                    console.warn('[Stormtrooper] Kask modeli yükleme uyarısı:', err);
+                    resolve(null);
+                }
+            );
+        });
+    }
+
+    /**
+     * 3. TIE Fighter'a Stormtrooper Kaskı Entegrasyonu (Child Object):
+     * 1. TIE Fighter'ın orijinal mesh hiyerarşisi, küresel kokpiti ve kanatları KESİNLİKLE bozulmaz / gizlenmez.
+     * 2. Kask, tieFighterModel.add() ile alt obje (child) olarak eklenir.
+     * 3. Ölçek (Scale): Kokpit içine rahatça sığacak kadar agresif bir şekilde küçültülür (scale.set(0.03, 0.03, 0.03)).
+     * 4. Pozisyon (Position): Kokpit merkezinde, şeffaf camın hemen arkasında (x: 0, y: 0.15, z: 0.85). Hiçbir parçası dışarı taşmaz.
+     * 5. Rotasyon (Rotation): Kaskın vizörü doğrudan ileriye (+Z eksenine, kaçan X-Wing'e) bakar.
+     */
+    attachStormtrooperHelmet(tieFighterModel) {
+        const prefab = stormtrooperHelmetPrefab || window.stormtrooperHelmetPrefab || this.stormtrooperHelmetPrefab;
+        if (!prefab || !tieFighterModel) return null;
+
+        const helmet = prefab.clone(true);
+        helmet.name = 'stormtrooper_pilot_helmet';
+
+        // 3. Taşma (Clipping) ve Ölçeklendirme Kontrolü
+        // Ölçek: Kaskın kokpiti yutmasını engellemek için agresif küçültme
+        helmet.scale.set(0.03, 0.03, 0.03);
+
+        // Pozisyon: Kokpit merkezinde, ön camın hemen arkasında
+        helmet.position.set(0, 0.15, 0.85);
+
+        // Rotasyon: Kask vizörü doğrudan ileri (+Z yönü, kaçan X-Wing) bakar
+        helmet.rotation.set(0, 0, 0);
+
+        tieFighterModel.add(helmet);
+        return helmet;
     }
 
     /**
@@ -888,8 +993,9 @@ class SpacewarsSimulation {
                     return;
                 }
 
-                // 2. Biyolojik sinek pilotu organlarını koru
-                if (name.includes('eye') || name.includes('thorax') || name.includes('abdomen') ||
+                // 2. Kask ve biyolojik pilot organlarını koru (PBR materyalini bozma)
+                if (name.includes('helmet') || name.includes('head') || name.includes('mask') || name.includes('stormtrooper') ||
+                    name.includes('eye') || name.includes('thorax') || name.includes('abdomen') ||
                     name.includes('wing_fly') || name.includes('holo')) {
                     return;
                 }

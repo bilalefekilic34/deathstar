@@ -174,12 +174,25 @@ export class EnemyTieSquadron {
         const group = new THREE.Group();
         group.name = `enemy_tie_${agentId}`;
 
-        // GLTF Modelini derin kopyala (clone)
+        // GLTF Modelini derin kopyala (clone) - TIE Fighter'ın orijinal mesh hiyerarşisi KORUNUR
         const shipMesh = this.masterTemplate.clone(true);
         group.add(shipMesh);
 
-        // 3D Drosophila Sinek Pilotunu TIE kokpiti içine yerleştir
-        const flyRig = this.buildFlyPilot(group);
+        // 3. Stormtrooper Kaskı Pilotu Entegrasyonu (Orijinal TIE Fighter modelinin alt objesi / child olarak)
+        const helmetPrefab = (typeof window !== 'undefined' ? window.stormtrooperHelmetPrefab : null);
+        if (helmetPrefab) {
+            const helmet = helmetPrefab.clone(true);
+            helmet.name = `stormtrooper_helmet_${agentId}`;
+            // Ölçeklendirme: Kokpit içine tam oturacak agresif ölçek
+            helmet.scale.set(0.03, 0.03, 0.03);
+            // Pozisyon: Kokpit merkezinde, şeffaf camın hemen arkasında
+            helmet.position.set(0, 0.15, 0.85);
+            // Rotasyon: Kaskın vizörü doğrudan ileriye (+Z ekseni) bakar
+            helmet.rotation.set(0, 0, 0);
+            shipMesh.add(helmet);
+        }
+
+        const flyRig = { leftPivot: new THREE.Group(), rightPivot: new THREE.Group() };
 
         group.position.set(spawnData.x, spawnData.y, spawnData.z);
         this.scene.add(group);
@@ -195,7 +208,7 @@ export class EnemyTieSquadron {
         };
 
         this.activeEnemies.set(agentId, instance);
-        console.log(`[EnemyTieSquadron] 👾 Sahneye Yeni Biyolojik Pilotlu Düşman TIE Fighter Eklendi: ${agentId}`);
+        console.log(`[EnemyTieSquadron] 👾 Sahneye Yeni Stormtrooper Pilotlu Düşman TIE Fighter Eklendi: ${agentId}`);
         return instance;
     }
 
