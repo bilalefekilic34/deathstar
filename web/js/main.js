@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SpacewarsTrench } from './spacewars_trench.js?v=6.0';
 import { HeroXWing } from './hero_x_wing.js?v=9.0';
 import { ExhaustPort } from './exhaust_port.js?v=6.0';
@@ -25,6 +26,10 @@ import { VideoRecorder } from './video_recorder.js?v=1.0';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 window.THREE = THREE;
+
+// Global Serbest Kamera (Free Camera / OrbitControls) Durum Bayrağı
+export let isFreeCamera = false;
+window.isFreeCamera = false;
 
 // Global Stormtrooper Kaskı Prefab Değişkeni (Performans için tek seferlik önbellek)
 export let stormtrooperHelmetPrefab = null;
@@ -53,6 +58,38 @@ class SpacewarsSimulation {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.15;
         this.container.appendChild(this.renderer.domElement);
+
+        // -------------------------------------------------------------
+        // SERBEST KAMERA MODU & ORBITCONTROLS ENTEGRASYONU
+        // -------------------------------------------------------------
+        this.isFreeCamera = false;
+        window.isFreeCamera = false;
+
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        window.controls = this.controls;
+
+        // KIRMIZI ÇİZGİ: OrbitControls'un varsayılan klavye ok tuşları (panning) özelliğini KESİNLİKLE KAPAT!
+        // Klavye ok tuşları (ArrowLeft / ArrowRight) sadece sinekler/ajanlar arası geçişe aittir.
+        this.controls.enableKeys = false;
+        if ('keys' in this.controls) {
+            this.controls.keys = {};
+        }
+
+        // Kontrol SADECE mouse ile yapılacak (Sol tık dönme, Sağ tık kaydırma, Tekerlek zoom)
+        this.controls.mouseButtons = {
+            LEFT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN
+        };
+        this.controls.enableRotate = true;
+        this.controls.enablePan = true;
+        this.controls.enableZoom = true;
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.08;
+        this.controls.screenSpacePanning = true;
+        this.controls.minDistance = 2.0;
+        this.controls.maxDistance = 1500.0;
+        this.controls.enabled = false; // Başlangıçta pasif; serbest kamera açılınca aktive edilir
 
         // 60 FPS Gerçek Zamanlı Video Kaydedici (MediaRecorder API)
         this.videoRecorder = new VideoRecorder(this.renderer.domElement, this);
@@ -2743,7 +2780,67 @@ class SpacewarsSimulation {
         };
     }
 
+    toggleFreeCamera(forceState = null) {
+        const nextState = (forceState !== null) ? Boolean(forceState) : !this.isFreeCamera;
+        this.isFreeCamera = nextState;
+        window.isFreeCamera = this.isFreeCamera;
+
+        if (this.controls) {
+            this.controls.enabled = this.isFreeCamera;
+            if (this.isFreeCamera) {
+                // Serbest kameraya geçerken hedefi aktif ajanın konumuna kilitle
+                const agents = this.getActiveAgents();
+                let currentTarget = agents.find(a => a.id === this.spectatorTargetId);
+                if (currentTarget && currentTarget.object) {
+                    this.controls.target.copy(currentTarget.object.position);
+                } else if (this.latestData?.ship) {
+                    this.controls.target.set(this.latestData.ship.x, this.latestData.ship.y, this.latestData.ship.z);
+                } else {
+                    const dir = new THREE.Vector3();
+                    this.camera.getWorldDirection(dir);
+                    this.controls.target.copy(this.camera.position).addScaledVector(dir, 30.0);
+                }
+                this.controls.update();
+            }
+        }
+
+        this.updateCameraHudUI();
+        console.log(`[Camera] 🎥 Serbest Kamera (OrbitControls) Durumu: ${this.isFreeCamera ? 'AKTİF (MOUSE KONTROLÜ)' : 'KAPALI (AJAN TAKİBİ)'}`);
+    }
+
+    updateCameraHudUI() {
+        const btnFree = document.getElementById('btn-cam-free');
+        if (btnFree) {
+            if (this.isFreeCamera) {
+                btnFree.classList.add('active');
+            } else {
+                btnFree.classList.remove('active');
+            }
+        }
+        ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar', 'btn-cam-enemy'].forEach((id, idx) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                if (!this.isFreeCamera && idx + 1 === this.cameraMode) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            }
+        });
+    }
+
     setSpectatorTarget(agentId) {
+        // Serbest kamera aktifse ok tuşlarıyla veya tıklamayla başka ajana geçildiğinde
+        // sistem otomatik olarak isFreeCamera = false moduna dönsün ve OrbitControls devre dışı kalsın
+        if (this.isFreeCamera) {
+            this.isFreeCamera = false;
+            window.isFreeCamera = false;
+            if (this.controls) {
+                this.controls.enabled = false;
+            }
+            this.updateCameraHudUI();
+        }
+
         const agents = this.getActiveAgents();
         const found = agents.find(a => a.id === agentId);
         if (found && found.isAlive) {
@@ -2771,6 +2868,21 @@ class SpacewarsSimulation {
     }
 
     cycleSpectatorTarget(direction = 1) {
+        // Ok Tuşları ile Akıllı Geri Dönüş (Smart Override):
+        // Oyuncu serbest kamerayla etrafta gezinirken, klavyedeki Sağ/Sol Ok (ArrowRight / ArrowLeft)
+        // tuşlarına basarak başka bir sineğe (ajana) geçmek isterse;
+        // Sistem otomatik olarak isFreeCamera = false moduna dönsün, OrbitControls devre dışı kalsın
+        // ve kamera anında seçilen o yeni ajanın arkasına (POV) yumuşak bir şekilde kilitlensin.
+        if (this.isFreeCamera) {
+            this.isFreeCamera = false;
+            window.isFreeCamera = false;
+            if (this.controls) {
+                this.controls.enabled = false;
+            }
+            this.updateCameraHudUI();
+            console.log('[Camera] 🎯 Ok tuşu algılandı: Serbest Kamera devreden çıkarıldı, seçilen ajanın POV takibine geçildi.');
+        }
+
         const agents = this.getActiveAgents().filter(a => a.isAlive);
         if (agents.length === 0) return;
 
@@ -2782,6 +2894,17 @@ class SpacewarsSimulation {
     }
 
     updateCamera(dt = 0.016) {
+        // Serbest Kamera Aktifken: GameLoop (render) döngüsü içindeki camera.position.lerp ve
+        // camera.lookAt (ajanı takip etme) kodlarını bir if (!isFreeCamera) bloğu içine alarak geçici olarak durdur.
+        // Böylece kamera ajanı takip etmeyi bırakır ve kontrol tamamen mouse'a (OrbitControls'a) geçer.
+        // controls.update() fonksiyonunu render döngüsünde çalıştır.
+        if (this.isFreeCamera) {
+            if (this.controls && this.controls.enabled) {
+                this.controls.update();
+            }
+            return;
+        }
+
         if (this.directorMode && this.directorMode.isActive) {
             this.directorMode.update(dt);
             if (this.cameraTrauma > 0) {
@@ -2858,11 +2981,11 @@ class SpacewarsSimulation {
             const targetY = ship.y + 10.5;
             const targetZ = ship.z - 46.0;
             
-            // X ve Y eksenlerinde yumuşak yaylanma, Z ekseninde senkronize takip
+            // X, Y ve Z eksenlerinde yumuşak yaylanma
             const smoothFactor = Math.min(1.0, 14.0 * dt);
             this.camera.position.x += (targetX - this.camera.position.x) * smoothFactor;
             this.camera.position.y += (targetY - this.camera.position.y) * smoothFactor;
-            this.camera.position.z = targetZ;
+            this.camera.position.z += (targetZ - this.camera.position.z) * smoothFactor;
             
             // Bakış odağı: Kahraman X-Wing'in hafif önü
             const lookX = ship.x * 0.85;
@@ -2879,7 +3002,7 @@ class SpacewarsSimulation {
             const smoothFactor = Math.min(1.0, 20.0 * dt);
             this.camera.position.x += (targetX - this.camera.position.x) * smoothFactor;
             this.camera.position.y += (targetY - this.camera.position.y) * smoothFactor;
-            this.camera.position.z = targetZ;
+            this.camera.position.z += (targetZ - this.camera.position.z) * smoothFactor;
 
             this.camera.lookAt(ship.x, ship.y - 0.1, ship.z + 0.2);
 
@@ -2997,12 +3120,15 @@ class SpacewarsSimulation {
             if (e.key === '3') this.setCameraMode(3);
             if (e.key === '4') this.setCameraMode(4);
             if (e.key === '5') this.setCameraMode(5);
-            // Gözlemci Modu Ok Tuşları ile Hızlı Kamera Geçişi
+            // Serbest Kamera (Free Camera / OrbitControls) Modu: C veya F tuşu ile Aç/Kapat (Toggle)
+            if (e.key === 'c' || e.key === 'C' || e.key === 'f' || e.key === 'F') {
+                this.toggleFreeCamera();
+            }
+            // Gözlemci Modu Ok Tuşları ile Hızlı Kamera Geçişi (Smart Override)
             if (e.key === 'ArrowRight') this.cycleSpectatorTarget(1);
             if (e.key === 'ArrowLeft') this.cycleSpectatorTarget(-1);
             if (e.key.toLowerCase() === 'd') this.injectDopamine(40.0);
             if (e.key.toLowerCase() === 'l') this.fireTieLasers();
-            if (e.key.toLowerCase() === 'f') this.handleFinaleButton();
             if (e.key.toLowerCase() === 'm') this.directorMode?.toggle();
             if (e.key.toLowerCase() === 'v') this.videoRecorder?.toggleRecording();
             if (e.key.toLowerCase() === 'r' && (this.isGameOver || this.isVictory || this.finalePhase === 3)) {
@@ -3016,6 +3142,7 @@ class SpacewarsSimulation {
         document.getElementById('btn-cam-pilot')?.addEventListener('click', () => this.setCameraMode(3));
         document.getElementById('btn-cam-deathstar')?.addEventListener('click', () => this.setCameraMode(4));
         document.getElementById('btn-cam-enemy')?.addEventListener('click', () => this.setCameraMode(5));
+        document.getElementById('btn-cam-free')?.addEventListener('click', () => this.toggleFreeCamera());
         document.getElementById('btn-dopamine')?.addEventListener('click', () => this.injectDopamine(40.0));
         document.getElementById('btn-laser')?.addEventListener('click', () => this.fireTieLasers());
         document.getElementById('btn-record')?.addEventListener('click', () => this.videoRecorder?.toggleRecording());
@@ -3026,6 +3153,11 @@ class SpacewarsSimulation {
     }
 
     setCameraMode(mode) {
+        if (this.isFreeCamera) {
+            this.isFreeCamera = false;
+            window.isFreeCamera = false;
+            if (this.controls) this.controls.enabled = false;
+        }
         this.cameraMode = mode;
         this.spectatorTargetId = 'hero_xwing';
         this.lastAgentsHash = '';
@@ -3035,13 +3167,7 @@ class SpacewarsSimulation {
             holoLabel.innerText = '3D SİNEK BEYNİ: RED 5 (KAHRAMAN X-WING)';
             holoLabel.style.color = '#38bdf8';
         }
-        ['btn-cam-chase', 'btn-cam-cockpit', 'btn-cam-pilot', 'btn-cam-deathstar', 'btn-cam-enemy'].forEach((id, idx) => {
-            const btn = document.getElementById(id);
-            if (btn) {
-                if (idx + 1 === mode) btn.classList.add('active');
-                else btn.classList.remove('active');
-            }
-        });
+        this.updateCameraHudUI();
         console.log(`[Camera] Mod Değiştirildi: ${mode}`);
     }
 
