@@ -326,7 +326,7 @@ class SpacewarsSimulation {
         const loadTasks = [
             { name: 'Trench Modülleri & Terminus', task: () => this.trench.init() },
             { name: 'Kahraman X-Wing (Red Five) & Biyo-Pilot', task: () => this.heroXWing.init() },
-            { name: 'Düşman İmparatorluk TIE Filosu', task: () => this.enemyTieSquadron.init() },
+            { name: 'Düşman İmparatorluk TIE Filosu', task: () => this.loadTieFighter() },
             { name: 'Stormtrooper Pilot Kaskı Prefab', task: () => this.loadStormtrooperHelmet() },
             { name: 'Termal Egzoz Çukuru', task: () => this.exhaustPort.init() },
             { name: '3D Sinek Beyni Hologramı', task: () => this.hologram.init() },
@@ -357,6 +357,11 @@ class SpacewarsSimulation {
             if (this.trench.endWall) this.applyMetallicTrenchMaterials(this.trench.endWall);
         }
 
+        // 2b. TIE Fighter Master Şablonu İçin Karanlık PBR Metalik Kaplama & envMap Entegrasyonu
+        if (this.enemyTieSquadron?.masterTemplate) {
+            this.applyMetallicTieFighterMaterials(this.enemyTieSquadron.masterTemplate);
+        }
+
         // 3. Death Star İstasyonu (Kameradan bağımsız sahnede hemen aktif, envMap & frustumCulled = false)
         if (this.deathStar) {
             this.deathStar.setSpawned(true);
@@ -375,6 +380,123 @@ class SpacewarsSimulation {
         }
 
         console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı, Stormtrooper Kaskı) hazırlandı!');
+    }
+
+    /**
+     * TIE Fighter Modelinin Yüklenmesi (GLTFLoader) ve Karanlık Metalik PBR Materyal Yapılandırması:
+     * 1. TIE Fighter modeli yüklendikten sonra tieFighterScene.traverse((child) => { ... }) döngüsü ile içindeki tüm mesh'ler dönülür.
+     * 2. Mesh'lerin materyalleri ışıkla doğru etkileşime girmesi için MeshStandardMaterial olarak yapılandırılır.
+     * 3. Renk: Beyaz veya gri KESİNLİKLE yapılmaz; orijinal koyu rengi korunur veya karanlık bir antrasit/siyah (#1a1a1a) atanır.
+     * 4. Metalness: Gövdenin uzay metali gibi yansıma yapması için yüksek tutulur (0.88, 0.8 - 0.9 aralığı).
+     * 5. Roughness: Yüzeyin çok hafif parlaması için orta-düşük tutulur (0.35, 0.3 - 0.4 aralığı). Güneş panelleri için 0.58 (daha mat).
+     * 6. Çevre Haritası: sahnede kullanılan envMap değişkeni child.material.envMap = this.scene.environment || this.envMap olarak KESİNLİKLE atanır.
+     */
+    async loadTieFighter() {
+        return new Promise((resolve, reject) => {
+            const loader = new GLTFLoader();
+            loader.load(
+                '/models/tie_fighter.glb',
+                (gltf) => {
+                    const tieFighterScene = gltf.scene;
+                    tieFighterScene.name = 'tie_fighter_master';
+                    tieFighterScene.frustumCulled = false;
+
+                    const envMapTarget = this.scene?.environment || this.envMap;
+
+                    // 1. TIE Fighter Mesh'lerini Gezme (Traverse)
+                    tieFighterScene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            child.frustumCulled = false;
+                            const name = (child.name || '').toLowerCase();
+
+                            // Şeffaf kokpit camını koru (Füme koyu cam)
+                            if (name.includes('glass') || name.includes('canopy')) {
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: new THREE.Color(0x14181c),
+                                    transparent: true,
+                                    opacity: 0.18,
+                                    roughness: 0.08,
+                                    metalness: 0.15,
+                                    depthWrite: false,
+                                    envMap: envMapTarget
+                                });
+                                return;
+                            }
+
+                            // Kask veya pilot organlarını koru
+                            if (name.includes('helmet') || name.includes('head') || name.includes('mask') || name.includes('stormtrooper') ||
+                                name.includes('eye') || name.includes('thorax') || name.includes('abdomen') || name.includes('wing_fly')) {
+                                return;
+                            }
+
+                            // İkiz İyon Motoru Egzozları (Kırmızı İmparatorluk İtki Işıltısı)
+                            if (name.includes('engine') && !name.includes('block') && !name.includes('nozzle')) {
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: new THREE.Color(0x110000),
+                                    emissive: new THREE.Color(0xff1e1e),
+                                    emissiveIntensity: 3.5,
+                                    roughness: 0.20,
+                                    metalness: 0.85,
+                                    envMap: envMapTarget
+                                });
+                                return;
+                            }
+
+                            // 2. Orijinal Rengi Koruma ve Metalik Ayarlar (MeshStandardMaterial)
+                            // Renk (Color): KESİNLİKLE beyaz veya gri yapılmaz; orijinal koyu rengi korunur (#1a1a1a / #111111)
+                            let tieColor = new THREE.Color(0x1a1a1a);
+                            if (child.material && child.material.color) {
+                                tieColor.copy(child.material.color);
+                                // Açık gri veya beyaz tonları karanlık antrasite (#1a1a1a) dönüştür
+                                if (tieColor.r > 0.30 && tieColor.g > 0.30 && tieColor.b > 0.30) {
+                                    tieColor.set(0x1a1a1a);
+                                }
+                            }
+
+                            // Güneş paneli kısımları (kanat içleri) daha mat kalır
+                            const isSolarPanel = (name === 'left_wing' || name === 'right_wing') && !name.includes('strut') && !name.includes('rim') && !name.includes('hub');
+                            const metalnessVal = isSolarPanel ? 0.35 : 0.88; // Gövde için 0.8 - 0.9 yüksek metalik
+                            const roughnessVal = isSolarPanel ? 0.58 : 0.35; // Gövde için 0.3 - 0.4 orta-düşük pürüzlülük
+
+                            // MeshStandardMaterial olarak yapılandır ve envMap ata
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: isSolarPanel ? new THREE.Color(0x11161d) : tieColor,
+                                metalness: metalnessVal,
+                                roughness: roughnessVal,
+                                // 3. Çevre Haritası (Environment Map) Entegrasyonu
+                                envMap: envMapTarget,
+                                envMapIntensity: isSolarPanel ? 0.6 : 1.8,
+                                bumpMap: isSolarPanel ? this.tieSolarBumpMap : this.tieBumpMap,
+                                bumpScale: isSolarPanel ? 0.04 : 0.02,
+                                side: THREE.DoubleSide
+                            });
+
+                            if (child.material) child.material.needsUpdate = true;
+                        }
+                    });
+
+                    // Master şablonu enemyTieSquadron'a aktar
+                    if (this.enemyTieSquadron) {
+                        this.enemyTieSquadron.masterTemplate = tieFighterScene;
+                        this.enemyTieSquadron.isModelReady = true;
+                    }
+
+                    console.log('[TIE Fighter] ✓ Karanlık PBR Metalik TIE Fighter Modeli (MeshStandardMaterial + envMap) Başarıyla Yüklendi!');
+                    resolve(tieFighterScene);
+                },
+                undefined,
+                (err) => {
+                    console.error('[TIE Fighter] Yükleme hatası:', err);
+                    if (this.enemyTieSquadron) {
+                        this.enemyTieSquadron.init().then(resolve).catch(reject);
+                    } else {
+                        reject(err);
+                    }
+                }
+            );
+        });
     }
 
     /**
@@ -1044,23 +1166,28 @@ class SpacewarsSimulation {
 
                 // 5. Ana Gövde Küresi, Kanat Pylon Kolları, İskelet Kolları (Struts), Çerçeveler (Rims),
                 // Merkez Göbek (Hub), Motor Bloğu ve Egzoz Çerçeveleri
-                // (İkonik İmparatorluk Battleship/Durasteel Çeliği #8fa0b2)
-                child.material = new THREE.MeshPhysicalMaterial({
-                    color: 0x8fa0b2,              // İkonik İmparatorluk Battleship Çeliği (#8fa0b2)
-                    roughness: 0.22,              // Pürüzsüz metalik yüzey = keskin ve göz alıcı specular parlamalar
-                    metalness: 0.88,              // Yüksek metalik iletkenlik
-                    clearcoat: 0.35,              // Zırh üstü metalik cila/gleam
-                    clearcoatRoughness: 0.18,
-                    envMap: this.envMap,
-                    envMapIntensity: 2.4,         // Dinamik uzay ve nebula yansımaları
+                // İkonik Karanlık İmparatorluk Antrasiti / Siyah (#1a1a1a) - KESİNLİKLE beyaz veya gri değil!
+                const origColor = child.material?.color ? child.material.color.clone() : new THREE.Color(0x1a1a1a);
+                if (origColor.r > 0.30 && origColor.g > 0.30 && origColor.b > 0.30) {
+                    origColor.set(0x1a1a1a);
+                }
+
+                // MeshStandardMaterial: metalness (0.8 - 0.9), roughness (0.3 - 0.4), envMap
+                child.material = new THREE.MeshStandardMaterial({
+                    color: origColor,
+                    roughness: 0.35,              // Orta-düşük seviyede hafif parlak
+                    metalness: 0.88,              // Yüksek metalik uzay metali
+                    envMap: this.scene?.environment || this.envMap,
+                    envMapIntensity: 1.8,         // Dinamik uzay ve nebula yansımaları
                     bumpMap: this.tieBumpMap,
-                    bumpScale: 0.03,
-                    roughnessMap: this.tieRoughnessMap,
+                    bumpScale: 0.02,
                     side: THREE.DoubleSide
                 });
+
+                if (child.material) child.material.needsUpdate = true;
             }
         });
-        console.log('[Material] ✓ TIE Fighter gerçekçi İmparatorluk Durasteel (#8fa0b2) MeshPhysicalMaterial ve fotovoltaik solar paneller uygulandı!');
+        console.log('[Material] ✓ TIE Fighter karanlık PBR metalik kaplaması (#1a1a1a, MeshStandardMaterial, envMap) uygulandı!');
     }
 
     /**

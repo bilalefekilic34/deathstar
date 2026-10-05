@@ -111,15 +111,16 @@ export class EnemyTieSquadron {
                             child.receiveShadow = true;
                             const name = (child.name || '').toLowerCase();
 
-                            // 1. Şeffaf Kokpit Camı (Biyo-pilot sinek net görünsün)
+                            // 1. Şeffaf Kokpit Camı (Füme koyu cam)
                             if (name.includes('glass') || name.includes('canopy')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x93c5fd,
-                                    opacity: 0.22,
+                                    color: 0x14181c,
+                                    opacity: 0.18,
                                     transparent: true,
                                     roughness: 0.08,
                                     metalness: 0.15,
-                                    depthWrite: false
+                                    depthWrite: false,
+                                    envMap: this.scene?.environment
                                 });
                             }
                             // 2. Güneş Panelleri (Fotovoltaik siyah solar ızgaralar)
@@ -127,28 +128,35 @@ export class EnemyTieSquadron {
                                 child.material = new THREE.MeshStandardMaterial({
                                     color: 0x11161d,
                                     roughness: 0.58,
-                                    metalness: 0.28,
+                                    metalness: 0.35,
+                                    envMap: this.scene?.environment,
+                                    envMapIntensity: 0.6,
                                     side: THREE.DoubleSide
                                 });
                             }
                             // 3. İkiz İyon Motorları (Kırmızı İmparatorluk reaktör ışıması)
                             else if (name.includes('engine') && !name.includes('block') && !name.includes('nozzle')) {
                                 child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x220000,
+                                    color: 0x110000,
                                     emissive: 0xff1e1e,
                                     emissiveIntensity: 3.5,
                                     roughness: 0.20,
-                                    metalness: 0.85
+                                    metalness: 0.85,
+                                    envMap: this.scene?.environment
                                 });
                             }
-                            // 4. Gövde & Kanat Pylonları (İmparatorluk Durasteel Gri/Mavi Çeliği)
+                            // 4. Gövde & Kanat Pylonları (İkonik Karanlık İmparatorluk Antrasiti / Siyah #1a1a1a)
                             else {
-                                child.material = new THREE.MeshPhysicalMaterial({
-                                    color: 0x8a9ba8,
-                                    roughness: 0.25,
-                                    metalness: 0.88,
-                                    clearcoat: 0.35,
-                                    clearcoatRoughness: 0.18,
+                                const origColor = child.material?.color ? child.material.color.clone() : new THREE.Color(0x1a1a1a);
+                                if (origColor.r > 0.30 && origColor.g > 0.30 && origColor.b > 0.30) {
+                                    origColor.set(0x1a1a1a);
+                                }
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: origColor,
+                                    roughness: 0.35,  // 0.3 - 0.4
+                                    metalness: 0.88,  // 0.8 - 0.9 uzay metali
+                                    envMap: this.scene?.environment,
+                                    envMapIntensity: 1.8,
                                     side: THREE.DoubleSide
                                 });
                             }
