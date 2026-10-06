@@ -31,6 +31,52 @@ export class ProtonTorpedoSystem {
             opacity: 0.65,
             blending: THREE.AdditiveBlending
         });
+
+        // Önceden oluşturulmuş Torpido Havuzu (Zero runtime scene.add & zero GC allocations)
+        this.pool = [];
+        for (let i = 0; i < 2; i++) {
+            const group = new THREE.Group();
+            group.name = `proton_torpedo_${i}`;
+            const coreMesh = new THREE.Mesh(this.torpedoGeo, this.torpedoMat);
+            const glowMesh = new THREE.Mesh(this.glowGeo, this.glowMat);
+            group.add(coreMesh);
+            group.add(glowMesh);
+
+            const light = new THREE.PointLight(0xff00ff, 4.0, 30);
+            group.add(light);
+            group.visible = false;
+            this.scene.add(group);
+
+            const trailCount = 45;
+            const trailGeo = new THREE.BufferGeometry();
+            const trailPositions = new Float32Array(trailCount * 3);
+            trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+            const trailMat = new THREE.PointsMaterial({
+                color: 0xff44ff,
+                size: 0.75,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+            const trailPoints = new THREE.Points(trailGeo, trailMat);
+            trailPoints.visible = false;
+            this.scene.add(trailPoints);
+
+            this.pool.push({
+                group: group,
+                light: light,
+                trail: trailPoints,
+                trailPositions: trailPositions,
+                trailGeo: trailGeo,
+                trailHistory: [],
+                speedZ: 145.0,
+                target: { x: 0, y: 0, z: 0 },
+                targetCenter: { x: 0, y: 0, z: 0 },
+                accuracy: 0.65,
+                box: new THREE.Box3(),
+                alive: false
+            });
+        }
     }
 
     fire(shipPos, targetPos, flyAimStats = {}) {
@@ -48,62 +94,33 @@ export class ProtonTorpedoSystem {
         const aimJitterX = (1.0 - accuracy) * (Math.random() - 0.5) * 18.0;
         const aimJitterY = (1.0 - accuracy) * (Math.random() - 0.5) * 14.0;
 
-        offsets.forEach((offsetX) => {
-            const group = new THREE.Group();
-
-            const coreMesh = new THREE.Mesh(this.torpedoGeo, this.torpedoMat);
-            const glowMesh = new THREE.Mesh(this.glowGeo, this.glowMat);
-            group.add(coreMesh);
-            group.add(glowMesh);
-
-            // Torpido Işığı
-            const light = new THREE.PointLight(0xff00ff, 4.0, 30);
-            group.add(light);
-
-            // Başlangıç konumu
+        offsets.forEach((offsetX, idx) => {
+            const t = this.pool[idx % this.pool.length];
             const startX = shipPos.x + offsetX;
             const startY = shipPos.y - 0.7;
             const startZ = shipPos.z + 2.2;
-            group.position.set(startX, startY, startZ);
+            t.group.position.set(startX, startY, startZ);
+            t.group.visible = true;
 
-            this.scene.add(group);
-
-            // Parçacık duman/iyon izi sistemi
-            const trailCount = 45;
-            const trailGeo = new THREE.BufferGeometry();
-            const trailPositions = new Float32Array(trailCount * 3);
-            for (let i = 0; i < trailCount * 3; i++) {
-                trailPositions[i] = group.position.x;
+            for (let i = 0; i < t.trailPositions.length; i += 3) {
+                t.trailPositions[i] = startX;
+                t.trailPositions[i + 1] = startY;
+                t.trailPositions[i + 2] = startZ;
             }
-            trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
-            const trailMat = new THREE.PointsMaterial({
-                color: 0xff44ff,
-                size: 0.75,
-                transparent: true,
-                opacity: 0.8,
-                blending: THREE.AdditiveBlending
-            });
-            const trailPoints = new THREE.Points(trailGeo, trailMat);
-            this.scene.add(trailPoints);
+            if (t.trailGeo) t.trailGeo.attributes.position.needsUpdate = true;
+            t.trail.visible = true;
 
             const targetCenter = targetPos ? { ...targetPos } : { x: 0, y: 22.0, z: shipPos.z + 260.0 };
-            // Gerçek isabet noktası: Sineğin hizalama hatası ve öğrenme isabetliliğine göre belirlenir
             const terminalX = targetCenter.x + aimJitterX + (shipPos.x * 0.25);
             const terminalY = targetCenter.y + aimJitterY + ((shipPos.y - 22.0) * 0.2);
 
-            this.torpedoes.push({
-                group: group,
-                light: light,
-                trail: trailPoints,
-                trailPositions: trailPositions,
-                trailHistory: [],
-                speedZ: 145.0, // m/s ileri hız (+z ekseninde)
-                target: { x: terminalX, y: terminalY, z: targetCenter.z },
-                targetCenter: targetCenter,
-                accuracy: accuracy,
-                box: new THREE.Box3(),
-                alive: true
-            });
+            t.target = { x: terminalX, y: terminalY, z: targetCenter.z };
+            t.targetCenter = targetCenter;
+            t.accuracy = accuracy;
+            t.alive = true;
+            t.trailHistory = [];
+
+            this.torpedoes.push(t);
         });
 
         console.log(`🚀 [TORPEDO] İkiz Proton Torpidoları Ateşlendi! Sinek İsabet Skoru: %${(accuracy * 100).toFixed(0)}`);
@@ -199,8 +216,9 @@ export class ProtonTorpedoSystem {
     }
 
     destroyTorpedo(t) {
-        if (t.group) this.scene.remove(t.group);
-        if (t.trail) this.scene.remove(t.trail);
+        if (t.group) t.group.visible = false;
+        if (t.trail) t.trail.visible = false;
+        t.alive = false;
     }
 
     readyForNextSalvo() {
@@ -212,7 +230,9 @@ export class ProtonTorpedoSystem {
     }
 
     reset() {
-        this.torpedoes.forEach(t => this.destroyTorpedo(t));
+        if (this.pool) {
+            this.pool.forEach(t => this.destroyTorpedo(t));
+        }
         this.torpedoes = [];
         this.isFired = false;
         this.hasHit = false;

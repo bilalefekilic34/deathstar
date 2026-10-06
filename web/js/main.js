@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SpacewarsTrench } from './spacewars_trench.js?v=6.0';
 import { HeroXWing } from './hero_x_wing.js?v=9.0';
-import { ExhaustPort } from './exhaust_port.js?v=6.0';
+import { ExhaustPort } from './exhaust_port.js?v=7.0';
 import { NeuralHologram } from './neural_hologram.js?v=6.0';
 import { ProtonTorpedoSystem } from './proton_torpedoes.js?v=6.0';
 import { DeathStarStation } from './death_star.js?v=6.0';
@@ -118,6 +118,26 @@ class SpacewarsSimulation {
         this.torpedoes = new ProtonTorpedoSystem(this.scene);
         this.deathStar = new DeathStarStation(this.scene);
         this.starfield = new StarfieldSystem(this.scene);
+
+        // -------------------------------------------------------------
+        // BOSS FIGHT ÇEVRESİ & GÖRÜNÜRLÜK YÖNETİMİ (VISIBILITY TOGGLE)
+        // -------------------------------------------------------------
+        // Boss Fight alanına ait tüm objeler başlangıçta sahneye (scene.add) eklenir.
+        // Bellekte hazır beklerken ekranda çizilmemesi için bossEnvironment.visible = false yapılır.
+        // Oyuncu boss alanına (trigger zone) girdiğinde sadece bossEnvironment.visible = true yapılır.
+        this.bossEnvironment = new THREE.Group();
+        this.bossEnvironment.name = 'boss_fight_environment';
+        this.scene.add(this.bossEnvironment);
+        this.bossEnvironment.visible = false;
+        window.bossEnvironment = this.bossEnvironment;
+
+        // Termal Egzoz Çukuru ve patlama gruplarını bossEnvironment altına bağla
+        if (this.exhaustPort?.group) {
+            this.bossEnvironment.add(this.exhaustPort.group);
+        }
+        if (this.exhaustPort?.explosionGroup) {
+            this.bossEnvironment.add(this.exhaustPort.explosionGroup);
+        }
 
         // 2. Çoklu-Ajan Düşman İmparatorluk TIE Fighter Filosu (Multi-Agent SNN)
         this.enemyTieSquadron = new EnemyTieSquadron(
@@ -414,6 +434,58 @@ class SpacewarsSimulation {
                     }
                 });
             }
+        }
+
+        // 4. Boss Fight Çevresi & Termal Egzoz Çukuru Hiyerarşisi (Visibility Toggle Hazırlığı)
+        if (this.bossEnvironment) {
+            if (this.exhaustPort?.group && this.exhaustPort.group.parent !== this.bossEnvironment) {
+                this.bossEnvironment.add(this.exhaustPort.group);
+            }
+            if (this.exhaustPort?.explosionGroup && this.exhaustPort.explosionGroup.parent !== this.bossEnvironment) {
+                this.bossEnvironment.add(this.exhaustPort.explosionGroup);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // SHADER ÖN DERLEME (PRE-COMPILE SHADERS - ZERO GPU COMPILATION JANK)
+        // -------------------------------------------------------------
+        // Three.js renderer.compile() visible = false olan objeleri atladığı için,
+        // sahnedeki ve boss alanındaki tüm objeler visible = true yapılarak
+        // tüm materyallerin WebGL shader programları oyun başlamadan önce GPU'ya derletilir.
+        if (this.bossEnvironment) this.bossEnvironment.visible = true;
+        if (this.exhaustPort?.group) this.exhaustPort.group.visible = true;
+        if (this.exhaustPort?.explosionGroup) this.exhaustPort.explosionGroup.visible = true;
+        if (this.exhaustPort?.hitExplosionGroup) this.exhaustPort.hitExplosionGroup.visible = true;
+        if (this.exhaustPort?.epicExplosionGroup) this.exhaustPort.epicExplosionGroup.visible = true;
+
+        if (this.torpedoes?.pool) {
+            this.torpedoes.pool.forEach(t => {
+                if (t.group) t.group.visible = true;
+                if (t.trail) t.trail.visible = true;
+            });
+        }
+
+        // Sahne matrislerini derleme öncesi güncelle
+        this.scene.updateMatrixWorld(true);
+
+        console.log('[Shader Precompile] ⚡ WebGL Shader ön derlemesi başlatılıyor (renderer.compile)...');
+        const compileStart = performance.now();
+        this.renderer.compile(this.scene, this.camera);
+        const compileDuration = (performance.now() - compileStart).toFixed(2);
+        console.log(`[Shader Precompile] ✓ Tüm shader programları GPU'ya başarıyla derlendi (${compileDuration} ms)! Oyun esnasında sıfır shader takılması (zero jank).`);
+
+        // Derleme tamamlandıktan sonra Boss Fight alanını oyuncu tetikleyene kadar gizle (Visibility Toggle)
+        if (this.bossEnvironment) this.bossEnvironment.visible = false;
+        if (this.exhaustPort?.group) this.exhaustPort.group.visible = false;
+        if (this.exhaustPort?.explosionGroup) this.exhaustPort.explosionGroup.visible = false;
+        if (this.exhaustPort?.hitExplosionGroup) this.exhaustPort.hitExplosionGroup.visible = false;
+        if (this.exhaustPort?.epicExplosionGroup) this.exhaustPort.epicExplosionGroup.visible = false;
+
+        if (this.torpedoes?.pool) {
+            this.torpedoes.pool.forEach(t => {
+                if (t.group) t.group.visible = false;
+                if (t.trail) t.trail.visible = false;
+            });
         }
 
         console.log('[Preload] ✓ Tüm uzay varlıkları (TIE Fighter gunmetal PBR, kırmızı siper vurguları, Ölüm Yıldızı, Stormtrooper Kaskı) hazırlandı!');
@@ -1572,7 +1644,15 @@ class SpacewarsSimulation {
         const shipZ = (this.latestData && this.latestData.ship) ? this.latestData.ship.z : 0;
         this.finalTargetZ = (typeof customTargetZ === 'number' && !isNaN(customTargetZ)) ? customTargetZ : (shipZ + 140.0);
 
-        // 1. ÖNCEDEN YÜKLENEN MODELLERİ GÖRÜNÜR KIL (Sıfır Thread Tıkanması / Sıfır Yükleme Freeze):
+        // 1. ÖNCEDEN YÜKLENEN MODELLERİ GÖRÜNÜR KIL (Görünürlük Geçişi - Zero scene.add, Zero stuttering):
+        // Oyuncu boss alanına (trigger zone) girdiğinde sadece visible = true yapılır.
+        if (this.bossEnvironment) {
+            this.bossEnvironment.visible = true;
+        }
+        if (this.exhaustPort?.group) {
+            this.exhaustPort.group.visible = true;
+        }
+
         // Death Star İstasyonunu göster ve hizala
         try {
             if (this.deathStar) {
@@ -3213,6 +3293,9 @@ class SpacewarsSimulation {
         this.torpedoes.reset();
         this.trench.resetFinale();
         this.exhaustPort.reset();
+        if (this.bossEnvironment) {
+            this.bossEnvironment.visible = false;
+        }
 
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'reset_game' }));

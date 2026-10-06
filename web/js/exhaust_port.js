@@ -22,14 +22,13 @@ export class ExhaustPort {
         this.pheromoneParticles = null;
         this.pheromoneRings = [];
 
-        // Patlama Sistemi
+        // Patlama Sistemi (Pre-allocated Object Pooling - Sıfır Çalışma Zamanı Ayrımı ve Sıfır Takılma)
         this.explosionGroup = new THREE.Group();
+        this.explosionGroup.visible = false;
         this.scene.add(this.explosionGroup);
-        this.explosionParticles = null;
-        this.explosionParticleData = [];
-        this.shockwaveRing = null;
-        this.explosionLight = null;
+
         this.isExploding = false;
+        this.explosionMode = 'hit';
         this.explosionTime = 0;
 
         this.isLoaded = false;
@@ -40,6 +39,9 @@ export class ExhaustPort {
 
         // Box3 Çarpışma Kutusu (Egzoz ağzı)
         this.collisionBox = new THREE.Box3();
+
+        // Patlama havuzunu (Hit & Epic particles, lights, shockwave, fireball) oyunun başında hazırla
+        this.initExplosionPool();
     }
 
     async init() {
@@ -222,30 +224,136 @@ export class ExhaustPort {
         return false;
     }
 
+    /**
+     * Patlama Havuzu Ön Yüklemesi (Pre-allocated Object Pooling):
+     * Ara vuruş ve süpernova reaktör patlamalarına ait tüm parçacık sistemleri,
+     * ışıklar, şok dalgası halkası ve alev topu modelleri oyun başında sahneye eklenir.
+     * Oyun esnasında sıfır bellek ayrımı (0 GC allocations) ve sıfır WebGL shader derlemesi.
+     */
+    initExplosionPool() {
+        // 1. Ara Darbe Patlaması Havuzu (Hit Explosion Pool - 350 Parçacık + Turuncu Işık)
+        this.hitExplosionGroup = new THREE.Group();
+        this.hitExplosionGroup.visible = false;
+
+        this.hitLight = new THREE.PointLight(0xffaa22, 10.0, 180);
+        this.hitExplosionGroup.add(this.hitLight);
+
+        this.hitParticleCount = 350;
+        const hitPositions = new Float32Array(this.hitParticleCount * 3);
+        const hitColors = new Float32Array(this.hitParticleCount * 3);
+        for (let i = 0; i < this.hitParticleCount; i++) {
+            hitPositions[i * 3] = 0;
+            hitPositions[i * 3 + 1] = 0;
+            hitPositions[i * 3 + 2] = 0;
+            hitColors[i * 3] = 1.0;
+            hitColors[i * 3 + 1] = 0.5;
+            hitColors[i * 3 + 2] = 0.1;
+        }
+
+        this.hitGeo = new THREE.BufferGeometry();
+        this.hitGeo.setAttribute('position', new THREE.BufferAttribute(hitPositions, 3));
+        this.hitGeo.setAttribute('color', new THREE.BufferAttribute(hitColors, 3));
+
+        this.hitMat = new THREE.PointsMaterial({
+            size: 1.4,
+            vertexColors: true,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending
+        });
+
+        this.hitParticles = new THREE.Points(this.hitGeo, this.hitMat);
+        this.hitExplosionGroup.add(this.hitParticles);
+        this.hitParticleData = [];
+
+        this.explosionGroup.add(this.hitExplosionGroup);
+
+        // 2. Süpernova Reaktif Patlaması Havuzu (Epic Supernova Pool - 1100 Parçacık + Beyaz Işık + Şok Dalgası + Alev Topu)
+        this.epicExplosionGroup = new THREE.Group();
+        this.epicExplosionGroup.visible = false;
+
+        this.epicLight = new THREE.PointLight(0xffeedd, 15.0, 350);
+        this.epicExplosionGroup.add(this.epicLight);
+
+        this.epicParticleCount = 1100;
+        const epicPositions = new Float32Array(this.epicParticleCount * 3);
+        const epicColors = new Float32Array(this.epicParticleCount * 3);
+        for (let i = 0; i < this.epicParticleCount; i++) {
+            epicPositions[i * 3] = 0;
+            epicPositions[i * 3 + 1] = 0;
+            epicPositions[i * 3 + 2] = 0;
+            epicColors[i * 3] = 1.0;
+            epicColors[i * 3 + 1] = 0.8;
+            epicColors[i * 3 + 2] = 0.4;
+        }
+
+        this.epicGeo = new THREE.BufferGeometry();
+        this.epicGeo.setAttribute('position', new THREE.BufferAttribute(epicPositions, 3));
+        this.epicGeo.setAttribute('color', new THREE.BufferAttribute(epicColors, 3));
+
+        this.epicMat = new THREE.PointsMaterial({
+            size: 1.8,
+            vertexColors: true,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending
+        });
+
+        this.epicParticles = new THREE.Points(this.epicGeo, this.epicMat);
+        this.epicExplosionGroup.add(this.epicParticles);
+
+        const shockGeo = new THREE.RingGeometry(2.0, 5.0, 36);
+        this.shockMat = new THREE.MeshBasicMaterial({
+            color: 0x00f0ff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending
+        });
+        this.shockwaveRing = new THREE.Mesh(shockGeo, this.shockMat);
+        this.shockwaveRing.rotation.x = Math.PI / 2;
+        this.epicExplosionGroup.add(this.shockwaveRing);
+
+        const fireballGeo = new THREE.SphereGeometry(6.0, 24, 24);
+        this.fireballMat = new THREE.MeshBasicMaterial({
+            color: 0xffdd44,
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending
+        });
+        this.fireball = new THREE.Mesh(fireballGeo, this.fireballMat);
+        this.epicExplosionGroup.add(this.fireball);
+
+        this.epicParticleData = [];
+
+        this.explosionGroup.add(this.epicExplosionGroup);
+
+        // Geriye dönük uyumluluk referansları
+        this.explosionParticles = this.epicParticles;
+        this.explosionLight = this.epicLight;
+    }
+
     triggerHitExplosion(pos) {
         // Ara Darbe Patlaması (Reaktör Çekirdeği sarsıntısı - 1 ila 4. vuruşlar)
         this.isExploding = true;
+        this.explosionMode = 'hit';
+        this.explosionTime = 0;
+
         const blastCenter = (pos && typeof pos.clone === 'function')
             ? pos.clone()
             : (pos ? new THREE.Vector3(pos.x || 0, pos.y || 0, pos.z || 0) : this.group.position.clone());
         this.explosionGroup.position.copy(blastCenter);
-        this.explosionGroup.clear();
 
-        // Parlak sarı/turuncu ışık patlaması
-        this.explosionLight = new THREE.PointLight(0xffaa22, 10.0, 180);
-        this.explosionGroup.add(this.explosionLight);
+        // Havuzdaki nesneleri sıfırla ve yeniden canlandır (Zero Allocation)
+        this.hitLight.intensity = 10.0;
+        this.hitMat.opacity = 1.0;
 
-        // 350 parçacıklı çekirdek darbe patlaması
-        const count = 350;
-        const geo = new THREE.BufferGeometry();
-        const positions = new Float32Array(count * 3);
-        const colors = new Float32Array(count * 3);
-        this.explosionParticleData = [];
+        const posAttr = this.hitGeo.attributes.position;
+        const colAttr = this.hitGeo.attributes.color;
+        this.hitParticleData = [];
 
-        for (let i = 0; i < count; i++) {
-            positions[i * 3] = 0;
-            positions[i * 3 + 1] = 0;
-            positions[i * 3 + 2] = 0;
+        for (let i = 0; i < this.hitParticleCount; i++) {
+            posAttr.setXYZ(i, 0, 0, 0);
 
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(Math.random() * 2 - 1);
@@ -255,11 +363,9 @@ export class ExhaustPort {
             const vy = Math.cos(phi) * speed;
             const vz = Math.sin(phi) * Math.sin(theta) * speed;
 
-            colors[i * 3] = 1.0;
-            colors[i * 3 + 1] = 0.4 + Math.random() * 0.4;
-            colors[i * 3 + 2] = 0.1;
+            colAttr.setXYZ(i, 1.0, 0.4 + Math.random() * 0.4, 0.1);
 
-            this.explosionParticleData.push({
+            this.hitParticleData.push({
                 vx: vx,
                 vy: vy,
                 vz: vz,
@@ -267,51 +373,46 @@ export class ExhaustPort {
             });
         }
 
-        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        posAttr.needsUpdate = true;
+        colAttr.needsUpdate = true;
 
-        const mat = new THREE.PointsMaterial({
-            size: 1.4,
-            vertexColors: true,
-            transparent: true,
-            opacity: 1.0,
-            blending: THREE.AdditiveBlending
-        });
+        this.hitExplosionGroup.visible = true;
+        this.epicExplosionGroup.visible = false;
+        this.explosionGroup.visible = true;
 
-        this.explosionParticles = new THREE.Points(geo, mat);
-        this.explosionGroup.add(this.explosionParticles);
-        console.log('💥 [HIT] Reaktör Çekirdeği Darbe Aldı! (Ara Patlama)');
+        console.log('💥 [HIT] Reaktör Çekirdeği Darbe Aldı! (Önceden Derlenen Havuzdan Çağrıldı - Zero Stutter)');
     }
 
     triggerEpicExplosion(pos, onFlashCallback) {
         this.isActive = false;
         this.isExploding = true;
+        this.explosionMode = 'epic';
         this.explosionTime = 0.0;
 
         const blastCenter = (pos && typeof pos.clone === 'function')
             ? pos.clone()
             : (pos ? new THREE.Vector3(pos.x || 0, pos.y || 0, pos.z || 0) : this.group.position.clone());
         this.explosionGroup.position.copy(blastCenter);
-        this.explosionGroup.clear();
 
         // 1. Beyaz Ekran Patlama Flaşı
         if (onFlashCallback) onFlashCallback();
 
-        // 2. Süper-Parlak Işık Kaynağı
-        this.explosionLight = new THREE.PointLight(0xffeedd, 15.0, 350);
-        this.explosionGroup.add(this.explosionLight);
+        // 2. Havuzdaki nesneleri sıfırla (Zero Allocation)
+        this.epicLight.intensity = 15.0;
+        this.epicMat.opacity = 1.0;
 
-        // 3. 1000+ Parçacıklı Devasa Patlama (ParticleSystem)
-        const count = 1100;
-        const geo = new THREE.BufferGeometry();
-        const positions = new Float32Array(count * 3);
-        const colors = new Float32Array(count * 3);
-        this.explosionParticleData = [];
+        this.shockwaveRing.scale.set(1.0, 1.0, 1.0);
+        this.shockMat.opacity = 0.9;
 
-        for (let i = 0; i < count; i++) {
-            positions[i * 3] = 0;
-            positions[i * 3 + 1] = 0;
-            positions[i * 3 + 2] = 0;
+        this.fireball.scale.set(1.0, 1.0, 1.0);
+        this.fireballMat.opacity = 0.95;
+
+        const posAttr = this.epicGeo.attributes.position;
+        const colAttr = this.epicGeo.attributes.color;
+        this.epicParticleData = [];
+
+        for (let i = 0; i < this.epicParticleCount; i++) {
+            posAttr.setXYZ(i, 0, 0, 0);
 
             // Rastgele küresel patlama hız vektörü
             const theta = Math.random() * Math.PI * 2;
@@ -326,22 +427,16 @@ export class ExhaustPort {
             const colorChoice = Math.random();
             if (colorChoice > 0.6) {
                 // Beyaz-altın plazma
-                colors[i * 3] = 1.0;
-                colors[i * 3 + 1] = 0.95;
-                colors[i * 3 + 2] = 0.7;
+                colAttr.setXYZ(i, 1.0, 0.95, 0.7);
             } else if (colorChoice > 0.25) {
                 // Ateş turuncusu
-                colors[i * 3] = 1.0;
-                colors[i * 3 + 1] = 0.45;
-                colors[i * 3 + 2] = 0.05;
+                colAttr.setXYZ(i, 1.0, 0.45, 0.05);
             } else {
                 // Koyu kızıl şok
-                colors[i * 3] = 0.95;
-                colors[i * 3 + 1] = 0.1;
-                colors[i * 3 + 2] = 0.05;
+                colAttr.setXYZ(i, 0.95, 0.1, 0.05);
             }
 
-            this.explosionParticleData.push({
+            this.epicParticleData.push({
                 vx: vx,
                 vy: vy,
                 vz: vz,
@@ -349,45 +444,14 @@ export class ExhaustPort {
             });
         }
 
-        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        posAttr.needsUpdate = true;
+        colAttr.needsUpdate = true;
 
-        const mat = new THREE.PointsMaterial({
-            size: 1.8,
-            vertexColors: true,
-            transparent: true,
-            opacity: 1.0,
-            blending: THREE.AdditiveBlending
-        });
+        this.hitExplosionGroup.visible = false;
+        this.epicExplosionGroup.visible = true;
+        this.explosionGroup.visible = true;
 
-        this.explosionParticles = new THREE.Points(geo, mat);
-        this.explosionGroup.add(this.explosionParticles);
-
-        // 4. Genişleyen Termonükleer Şok Dalgası Halkası (Shockwave Ring)
-        const shockGeo = new THREE.RingGeometry(2.0, 5.0, 36);
-        const shockMat = new THREE.MeshBasicMaterial({
-            color: 0x00f0ff,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.9,
-            blending: THREE.AdditiveBlending
-        });
-        this.shockwaveRing = new THREE.Mesh(shockGeo, shockMat);
-        this.shockwaveRing.rotation.x = Math.PI / 2;
-        this.explosionGroup.add(this.shockwaveRing);
-
-        // 5. Çekirdek Patlama Küresi
-        const fireballGeo = new THREE.SphereGeometry(6.0, 24, 24);
-        const fireballMat = new THREE.MeshBasicMaterial({
-            color: 0xffdd44,
-            transparent: true,
-            opacity: 0.95,
-            blending: THREE.AdditiveBlending
-        });
-        this.fireball = new THREE.Mesh(fireballGeo, fireballMat);
-        this.explosionGroup.add(this.fireball);
-
-        console.log('💥 [SUPERNOVA] Devasa Parçacık Patlaması Tetiklendi!');
+        console.log('💥 [SUPERNOVA] Devasa Parçacık Patlaması Tetiklendi! (Önceden Derlenen Havuzdan Çağrıldı - Zero Stutter)');
     }
 
     update(dt, shipPos) {
@@ -415,48 +479,84 @@ export class ExhaustPort {
         // 3. Patlama Animasyonu Güncellemesi
         if (this.isExploding) {
             this.explosionTime += dt;
-            const maxDuration = 3.5; // saniye
-            const progress = this.explosionTime / maxDuration;
 
-            // Parçacık fiziği
-            if (this.explosionParticles) {
-                const posAttr = this.explosionParticles.geometry.attributes.position;
-                for (let i = 0; i < this.explosionParticleData.length; i++) {
-                    const p = this.explosionParticleData[i];
-                    p.vx *= p.drag;
-                    p.vy *= p.drag;
-                    p.vz *= p.drag;
+            if (this.explosionMode === 'hit') {
+                const maxDuration = 1.6;
+                const progress = this.explosionTime / maxDuration;
 
-                    const curX = posAttr.getX(i);
-                    const curY = posAttr.getY(i);
-                    const curZ = posAttr.getZ(i);
+                if (this.hitParticles) {
+                    const posAttr = this.hitGeo.attributes.position;
+                    for (let i = 0; i < this.hitParticleData.length; i++) {
+                        const p = this.hitParticleData[i];
+                        p.vx *= p.drag;
+                        p.vy *= p.drag;
+                        p.vz *= p.drag;
 
-                    posAttr.setXYZ(i, curX + p.vx * dt, curY + p.vy * dt, curZ + p.vz * dt);
+                        const curX = posAttr.getX(i);
+                        const curY = posAttr.getY(i);
+                        const curZ = posAttr.getZ(i);
+
+                        posAttr.setXYZ(i, curX + p.vx * dt, curY + p.vy * dt, curZ + p.vz * dt);
+                    }
+                    posAttr.needsUpdate = true;
+                    this.hitMat.opacity = Math.max(0, 1.0 - progress);
                 }
-                posAttr.needsUpdate = true;
-                this.explosionParticles.material.opacity = Math.max(0, 1.0 - progress);
-            }
 
-            // Şok dalgası genişlemesi
-            if (this.shockwaveRing) {
-                const shockScale = 1.0 + this.explosionTime * 45.0; // Hızlıca 120 metreye yayılır
-                this.shockwaveRing.scale.set(shockScale, shockScale, 1.0);
-                this.shockwaveRing.material.opacity = Math.max(0, 1.0 - progress * 1.4);
-            }
+                if (this.hitLight) {
+                    this.hitLight.intensity = Math.max(0, 10.0 * (1.0 - progress));
+                }
 
-            // Çekirdek alev topu büyümesi ve sönmesi
-            if (this.fireball) {
-                this.fireball.scale.addScalar(dt * 20.0);
-                this.fireball.material.opacity = Math.max(0, 1.0 - progress * 1.8);
-            }
+                if (this.explosionTime >= maxDuration) {
+                    this.isExploding = false;
+                    this.hitExplosionGroup.visible = false;
+                    this.explosionGroup.visible = false;
+                }
+            } else if (this.explosionMode === 'epic') {
+                const maxDuration = 3.5; // saniye
+                const progress = this.explosionTime / maxDuration;
 
-            // Işık parlaklığı sönümü
-            if (this.explosionLight) {
-                this.explosionLight.intensity = Math.max(0, 15.0 * (1.0 - progress));
-            }
+                // Parçacık fiziği
+                if (this.epicParticles) {
+                    const posAttr = this.epicGeo.attributes.position;
+                    for (let i = 0; i < this.epicParticleData.length; i++) {
+                        const p = this.epicParticleData[i];
+                        p.vx *= p.drag;
+                        p.vy *= p.drag;
+                        p.vz *= p.drag;
 
-            if (this.explosionTime >= maxDuration) {
-                this.isExploding = false;
+                        const curX = posAttr.getX(i);
+                        const curY = posAttr.getY(i);
+                        const curZ = posAttr.getZ(i);
+
+                        posAttr.setXYZ(i, curX + p.vx * dt, curY + p.vy * dt, curZ + p.vz * dt);
+                    }
+                    posAttr.needsUpdate = true;
+                    this.epicMat.opacity = Math.max(0, 1.0 - progress);
+                }
+
+                // Şok dalgası genişlemesi
+                if (this.shockwaveRing) {
+                    const shockScale = 1.0 + this.explosionTime * 45.0; // Hızlıca 120 metreye yayılır
+                    this.shockwaveRing.scale.set(shockScale, shockScale, 1.0);
+                    this.shockMat.opacity = Math.max(0, 1.0 - progress * 1.4);
+                }
+
+                // Çekirdek alev topu büyümesi ve sönmesi
+                if (this.fireball) {
+                    this.fireball.scale.addScalar(dt * 20.0);
+                    this.fireballMat.opacity = Math.max(0, 1.0 - progress * 1.8);
+                }
+
+                // Işık parlaklığı sönümü
+                if (this.epicLight) {
+                    this.epicLight.intensity = Math.max(0, 15.0 * (1.0 - progress));
+                }
+
+                if (this.explosionTime >= maxDuration) {
+                    this.isExploding = false;
+                    this.epicExplosionGroup.visible = false;
+                    this.explosionGroup.visible = false;
+                }
             }
         }
 
@@ -483,6 +583,9 @@ export class ExhaustPort {
         this.isActive = false;
         this.group.visible = false;
         this.isExploding = false;
-        this.explosionGroup.clear();
+        this.explosionTime = 0;
+        if (this.hitExplosionGroup) this.hitExplosionGroup.visible = false;
+        if (this.epicExplosionGroup) this.epicExplosionGroup.visible = false;
+        if (this.explosionGroup) this.explosionGroup.visible = false;
     }
 }
