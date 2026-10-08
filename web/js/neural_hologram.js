@@ -65,6 +65,9 @@ export class NeuralHologram {
         this.tooltipEl = null;
         this.isMouseOverContainer = false;
         this.isHovered = false;
+        this.isBrainHovered = false;
+        this.brainModel = null;
+        this.explodedMeshes = [];
 
         // UI Kutu Boyutları & Dinamik Canvas Çözünürlüğü Takibi (Anti-Stretching)
         this.currentWidth = 260;
@@ -284,8 +287,53 @@ export class NeuralHologram {
                     });
 
                     this.brainGroup.add(model);
+                    this.brainModel = model;
+                    window.brainModel = model;
+                    this.explodedMeshes = [];
+
+                    // 1. Orijinal Pozisyonların Ön Belleğe Alınması (userData.originalPosition) ve Patlatılmış Hedefler (userData.explodedPosition)
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.userData.originalPosition = child.position.clone();
+
+                            // Merkeze (0,0,0) olan uzaklığına ve anatomik yönüne göre dışarı doğru patlama hedefi (explodedPosition)
+                            if (child.position.lengthSq() > 0.1) {
+                                child.userData.explodedPosition = child.userData.originalPosition.clone().multiplyScalar(1.45);
+                            } else {
+                                // Pivotları (0,0,0) noktasında fırınlanmış GLB modellerinde geometrik merkez ve lob yönüne göre hesapla
+                                if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+                                const geomCenter = new THREE.Vector3();
+                                child.geometry.boundingBox.getCenter(geomCenter);
+
+                                const name = (child.name || '').toLowerCase();
+                                let explodeOffset = new THREE.Vector3();
+
+                                if (name.includes('optic') && name.includes('left')) {
+                                    explodeOffset.set(-7.5, 0.0, 0.0);
+                                } else if (name.includes('optic')) {
+                                    explodeOffset.set(7.5, 0.0, 0.0);
+                                } else if (name.includes('mushroom')) {
+                                    explodeOffset.set(0.0, 5.0, 2.5);
+                                } else if (name.includes('giant')) {
+                                    explodeOffset.set(0.0, -5.0, -3.2);
+                                } else if (name.includes('central')) {
+                                    explodeOffset.set(0.0, 0.0, 4.5);
+                                } else if (name.includes('cortex') || name.includes('shell')) {
+                                    explodeOffset.set(0.0, 0.0, -4.5);
+                                } else if (geomCenter.lengthSq() > 0.1) {
+                                    explodeOffset.copy(geomCenter).normalize().multiplyScalar(5.5);
+                                } else {
+                                    explodeOffset.set(0.0, 0.0, 3.5);
+                                }
+
+                                child.userData.explodedPosition = child.userData.originalPosition.clone().add(explodeOffset);
+                            }
+                            this.explodedMeshes.push(child);
+                        }
+                    });
+
                     this.isLoaded = true;
-                    console.log('[NeuralHologram] ✓ 3D Sinek Beyni Modeli (Drosophila Brain GLB) Başarıyla Entegre Edildi!');
+                    console.log(`[NeuralHologram] ✓ 3D Sinek Beyni Modeli (Drosophila Brain GLB) & Exploded View userData (${this.explodedMeshes.length} Parça) Başarıyla Entegre Edildi!`);
                     resolve();
                 },
                 undefined,
@@ -340,10 +388,16 @@ export class NeuralHologram {
 
         const onPointerEnter = () => {
             this.isMouseOverContainer = true;
+            this.isBrainHovered = true;
+            if (typeof isBrainHovered !== 'undefined') isBrainHovered = true;
+            if (window.isBrainHovered !== undefined) window.isBrainHovered = true;
         };
 
         const onPointerLeave = () => {
             this.isMouseOverContainer = false;
+            this.isBrainHovered = false;
+            if (typeof isBrainHovered !== 'undefined') isBrainHovered = false;
+            if (window.isBrainHovered !== undefined) window.isBrainHovered = false;
             this.mouse.set(-999, -999);
             this.isDragging = false;
             this.hideTooltip();
@@ -483,6 +537,10 @@ export class NeuralHologram {
             // Cortex hafif canlı nabız atışı (Biomimetic subtle breathing glow)
             const breath = 0.22 + Math.sin(performance.now() * 0.002) * 0.08;
             this.cortexMesh.material.emissiveIntensity = breath;
+
+            // Patlatılmış görünümde iç devreleri engellememek için saydamlığı zarifçe artır
+            const targetOpacity = (this.isBrainHovered || window.isBrainHovered) ? 0.12 : 0.26;
+            this.cortexMesh.material.opacity += (targetOpacity - this.cortexMesh.material.opacity) * 0.1;
         }
 
         // 3. Otomatik Dönüş (Sürükleme yapılmıyorsa)

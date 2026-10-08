@@ -35,6 +35,10 @@ window.isFreeCamera = false;
 export let stormtrooperHelmetPrefab = null;
 window.stormtrooperHelmetPrefab = null;
 
+// Global 3D Sinek Beyni Hologramı Hover / Exploded View (Patlatılmış Görünüm) Durum Bayrağı
+export let isBrainHovered = false;
+window.isBrainHovered = false;
+
 class SpacewarsSimulation {
     constructor() {
         this.container = document.getElementById('canvas-container');
@@ -115,6 +119,7 @@ class SpacewarsSimulation {
 
         this.exhaustPort = new ExhaustPort(this.scene);
         this.hologram = new NeuralHologram('hologram-container');
+        this.isBrainHovered = false;
         this.torpedoes = new ProtonTorpedoSystem(this.scene);
         this.deathStar = new DeathStarStation(this.scene);
         this.starfield = new StarfieldSystem(this.scene);
@@ -3230,6 +3235,23 @@ class SpacewarsSimulation {
         document.getElementById('btn-finale')?.addEventListener('click', () => this.handleFinaleButton());
         document.getElementById('btn-restart')?.addEventListener('click', () => this.restartGame());
         document.getElementById('btn-modal-restart')?.addEventListener('click', () => this.restartGame());
+
+        // 2. 3D Sinek Beyni Hologramı - Exploded View (Patlatılmış Görünüm) Hover Etkileşimi
+        const brainContainer = document.getElementById('hologram-container');
+        if (brainContainer) {
+            brainContainer.addEventListener('mouseenter', () => {
+                isBrainHovered = true;
+                this.isBrainHovered = true;
+                window.isBrainHovered = true;
+                if (this.hologram) this.hologram.isBrainHovered = true;
+            });
+            brainContainer.addEventListener('mouseleave', () => {
+                isBrainHovered = false;
+                this.isBrainHovered = false;
+                window.isBrainHovered = false;
+                if (this.hologram) this.hologram.isBrainHovered = false;
+            });
+        }
     }
 
     setCameraMode(mode) {
@@ -3556,8 +3578,21 @@ class SpacewarsSimulation {
                 console.warn('[GameLoop Recovery] Lazer güncelleme hatası:', errLasers);
             }
 
-            // 8. 3D Nöral Hologram (İzlenen Ajanın Gerçek Zamanlı SNN Telemetrisi & Hover Scale)
+            // 8. 3D Nöral Hologram (İzlenen Ajanın Gerçek Zamanlı SNN Telemetrisi & Exploded View)
             try {
+                // 3. Render Döngüsünde Pürüzsüz Animasyon (Vector3.lerp - Exploded View Parça Söküm/Birleşim)
+                if (this.hologram?.brainModel) {
+                    this.hologram.brainModel.traverse((child) => {
+                        if (child.isMesh && child.userData.explodedPosition && child.userData.originalPosition) {
+                            if (isBrainHovered || this.isBrainHovered) {
+                                child.position.lerp(child.userData.explodedPosition, 0.1);
+                            } else {
+                                child.position.lerp(child.userData.originalPosition, 0.1);
+                            }
+                        }
+                    });
+                }
+
                 if (this.hologram?.update) {
                     const currentBrain = this.getCurrentBrainTelemetry();
                     this.hologram.update(currentBrain.neural, currentBrain.fullData, currentBrain, dt);
