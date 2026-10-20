@@ -1,8 +1,57 @@
-Death Star v2: Drosophila SNN Flight Control & Neural Trench Run
+# Death Star v2: Drosophila SNN Flight Control & Neural Trench Run
 
 [EN] An interactive 3D Star Wars Death Star trench run simulation based on the biological vision system and brain connectome of Drosophila melanogaster (fruit fly) (Janelia male-cns:v1.0), powered by a 750-ommatidia compound eye architecture and a Spiking Neural Network (SNN).
 
 [TR] Drosophila melanogaster (meyve sineği) biyolojik görme sistemi ve beyin konektomunu (Janelia male-cns:v1.0) referans alan; 750 ommatidia bileşik göz mimarisi ve Spiking Neural Network (SNN) ile çalışan interaktif 3D Star Wars Death Star siper uçuş simülasyonu.
+
+---
+
+## 📸 Simulation Showcase | Simülasyon Galerisi
+
+<!-- Hero Banner: Imperial TIE Fighter Chase -->
+<p align="center">
+  <img src="screenshots/07_tie_fighter_chase_dogfight.png" alt="Imperial TIE Fighter Chasing X-Wing" width="100%"/>
+  <br>
+  <em><b>[EN]</b> Imperial TIE Fighter in hot pursuit down the Death Star trench.<br>
+  <b>[TR]</b> Ölüm Yıldızı siperinde X-Wing'i kovalayan İmparatorluk TIE Fighter'ı.</em>
+</p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="screenshots/01_chase_trench_dogfight.png" alt="Trench Dogfight & SNN Telemetry"/>
+      <p align="center">
+        <b>[EN] Trench Dogfight & Real-Time SNN Telemetry</b><br>
+        <b>[TR] Siper İçi İt Dalaşı & Canlı SNN Telemetrisi</b>
+      </p>
+    </td>
+    <td width="50%">
+      <img src="screenshots/02_drosophila_cockpit_view.png" alt="Drosophila Bio-Pilot"/>
+      <p align="center">
+        <b>[EN] Drosophila Melanogaster Bio-Pilot in Cockpit</b><br>
+        <b>[TR] Kokpitteki Drosophila Melanogaster Biyo-Pilotu</b>
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="screenshots/03_fly_pilot_pov_cockpit.png" alt="Fly Pilot POV"/>
+      <p align="center">
+        <b>[EN] Fly Pilot POV (750 Ommatidia Compound Eye)</b><br>
+        <b>[TR] Sinek Pilotun Gözünden Görüş (750 Ommatidia)</b>
+      </p>
+    </td>
+    <td width="50%">
+      <img src="screenshots/04_brain_connectome_exploded_view.png" alt="Connectome Exploded View"/>
+      <p align="center">
+        <b>[EN] 3D Connectome Exploded View (Iron Man Mode)</b><br>
+        <b>[TR] 3D Konektom Patlatılmış Görünüm (Mekanik Söküm)</b>
+      </p>
+    </td>
+  </tr>
+</table>
+
+---
 
 🌟 Features | Özellikler
 
@@ -122,6 +171,7 @@ deathstarv2/
 │   ├── tie_fighter.glb
 │   ├── exhaust_port.glb
 │   └── trench_module.glb
+├── screenshots/              # Simulation showcase images / Simülasyon ekran görüntüleri
 └── web/                      # Three.js 3D client interface / istemci arayüzü
     ├── index.html
     ├── css/
